@@ -39,13 +39,10 @@ on:
         type: boolean
 
       enable_feature_b:
-         description: "添加BBR控制算法"
-         required: false
-         default: false
-         type: boolean
-
-  
-
+        description: "添加BBR控制算法"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   build:
@@ -81,11 +78,11 @@ jobs:
       - name: ⚙️ Set KERNEL_TIME (设置构建时间)
         id: set_kernel_time
         run: |
-          if [ "$KEEP_ORIGINAL" = "false" ] && [ -n "$CUSTOM_TIME" ]; then
-            echo "使用自定义构建时间: $CUSTOM_TIME"
-            echo "KERNEL_TIME=$CUSTOM_TIME" >> $GITHUB_ENV
+          if [ "${{ github.event.inputs.keep_original_settings }}" = "false" ] && [ -n "${{ github.event.inputs.custom_kernel_time }}" ]; then
+            echo "使用自定义构建时间: ${{ github.event.inputs.custom_kernel_time }}"
+            echo "KERNEL_TIME=${{ github.event.inputs.custom_kernel_time }}" >> $GITHUB_ENV
           else
-            case "$DEVICES_NAME" in
+            case "${{ env.DEVICES_NAME }}" in
               oneplus_13 | oneplus_ace5_pro | realme_GT7pro | realme_GT7pro_Speed)
                 echo 'KERNEL_TIME=Tue Dec 17 23:36:49 UTC 2024' >> $GITHUB_ENV
                 ;;
@@ -103,7 +100,7 @@ jobs:
 
       - name: ⚙️ Set device-specific CCACHE_DIR (设置对应机型Cceche路径)
         run: |
-          echo "CCACHE_DIR=$HOME/.ccache_${REPO_MANIFEST}" >> $GITHUB_ENV
+          echo "CCACHE_DIR=$HOME/.ccache_${{ env.REPO_MANIFEST }}" >> $GITHUB_ENV
 
       - name: 📦 Configure Git (设置下载账户)
         run: |
@@ -184,7 +181,7 @@ jobs:
       - name: 📥 Initialize repo and sync (初始化repo并同步内核源码)
         run: |
          mkdir kernel_workspace && cd kernel_workspace
-         repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/sm8750 -m ${REPO_MANIFEST}.xml --depth=1
+         repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/sm8750 -m ${{ env.REPO_MANIFEST }}.xml --depth=1
          repo --trace sync -c -j$(nproc --all) --no-tags
          rm kernel_platform/common/android/abi_gki_protected_exports_* || echo "No protected exports!"
          rm kernel_platform/msm-kernel/android/abi_gki_protected_exports_* || echo "No protected exports!"
@@ -220,7 +217,7 @@ jobs:
 
             # Apply patches
             cd ./common
-            if [ "$DEVICES_NAME" != "oneplus_ace5_ultra" ]; then
+            if [ "${{ env.DEVICES_NAME }}" != "oneplus_ace5_ultra" ]; then
                 files=(
                     "lib/lz4/lz4_compress.c"
                     "lib/lz4/lz4_decompress.c"
@@ -237,18 +234,27 @@ jobs:
             cp -r ../../lz4_patch/zram/include/linux/* ./include/linux/
             cp -r ../../lz4_patch/zram/6.6/lz4_1.10.0.patch ./
 
-            patch -p1 -F 3 --fuzz=5 < lz4_1.10.0.patch || true
+            if ! patch -p1 -F 3 --fuzz=5 < lz4_1.10.0.patch; then
+              echo "::error ::Failed to apply lz4_1.10.0.patch"
+              exit 1
+            fi
     
-            if [ "${REPO_MANIFEST}" != "oneplus_13t" ] && [ "${REPO_MANIFEST}" != "oneplus_ace5_ultra" ] &&[ "${REPO_MANIFEST}" != "oneplus_pad_2_pro" ] ; then
+            if [ "${{ env.REPO_MANIFEST }}" != "oneplus_13t" ] && [ "${{ env.REPO_MANIFEST }}" != "oneplus_ace5_ultra" ] && [ "${{ env.REPO_MANIFEST }}" != "oneplus_pad_2_pro" ]; then
             echo "修复内核版本6.6部分机型缺失Trusty OS导致的susfs的报错"
             sed -i 's/-32,12 +32,38/-32,11 +32,37/g' 50_add_susfs_in_gki-android15-6.6.patch
             sed -i '/#include <trace\/hooks\/fs.h>/d' 50_add_susfs_in_gki-android15-6.6.patch
             fi
             fi  
     
-            patch -p1 < 50_add_susfs_in_gki-android15-6.6.patch || true
+            if ! patch -p1 < 50_add_susfs_in_gki-android15-6.6.patch; then
+              echo "::error ::Failed to apply 50_add_susfs_in_gki-android15-6.6.patch"
+              exit 1
+            fi
             cp ../../SukiSU_patch/hooks/syscall_hooks.patch ./
-            patch -p1 -F 3 < syscall_hooks.patch
+            if ! patch -p1 -F 3 < syscall_hooks.patch; then
+              echo "::error ::Failed to apply syscall_hooks.patch"
+              exit 1
+            fi
             
             echo "完成"
 
@@ -265,8 +271,13 @@ jobs:
         run: |
           PATCH_FILE="${{ runner.temp }}/hmbird_patch.c"
           if [ ! -f "$PATCH_FILE" ]; then
-            echo "下载HMBird补丁..."
-            cp "${GITHUB_WORKSPACE}/hmbird_patch.c" "$PATCH_FILE"
+            if [ -f "${GITHUB_WORKSPACE}/hmbird_patch.c" ]; then
+              echo "下载HMBird补丁..."
+              cp "${GITHUB_WORKSPACE}/hmbird_patch.c" "$PATCH_FILE"
+            else
+              echo "::error ::hmbird_patch.c not found in ${GITHUB_WORKSPACE}"
+              exit 1
+            fi
           fi
           
           cd kernel_workspace/kernel_platform/common/drivers
@@ -337,7 +348,7 @@ jobs:
         run: |
           cd kernel_workspace/kernel_platform
 
-          case "$DEVICES_NAME" in
+          case "${{ env.DEVICES_NAME }}" in
             oneplus_13 | oneplus_ace5_pro | realme_GT7pro | realme_GT7pro_Speed)
               DEFAULT_SUFFIX="-android15-8-g013ec21bba94-abogki383916444-4k"
               ;;
@@ -350,12 +361,9 @@ jobs:
             oneplus_ace5_ultra)
               DEFAULT_SUFFIX="-android15-8-gfc70d29746a7-abogki412262948-4k"
               ;;
-            oneplus_13s)
-              DEFAULT_SUFFIX="-android15-8-gd43086512890-abogki423825152-4k"
-              ;;
           esac
           
-          echo "当前机型: $DEVICES_NAME"
+          echo "当前机型: ${{ env.DEVICES_NAME }}"
           echo "保持原设置: $KEEP_ORIGINAL"
           echo "自定义后缀: $CUSTOM_SUFFIX"
           echo "默认后缀: $DEFAULT_SUFFIX"
@@ -375,7 +383,7 @@ jobs:
           sed -i 's/${scm_version}//' ./common/scripts/setlocalversion
           
       - name: 🔧 Add sched_ext (写入风驰补丁)
-        if: ${{inputs.enable_feature_z }}
+        if: ${{ github.event.inputs.enable_feature_z }}
         run: |
          cd kernel_workspace/kernel_platform/
          git clone https://github.com/HanKuCha/sched_ext.git
@@ -386,7 +394,24 @@ jobs:
       - name: 🔨 Build Kernel (构建内核)
         run: |
           export PATH="/usr/lib/ccache:$PATH"
-          export PATH="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86/clang-r510928/bin:$PATH"
+          CLANG_PATH="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86/clang-r510928/bin"
+          RUSTC_PATH="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/prebuilts/rust/linux-x86/1.73.0b/bin/rustc"
+          PAHOLE_PATH="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/prebuilts/kernel-build-tools/linux-x86/bin/pahole"
+
+          if [ ! -d "$CLANG_PATH" ]; then
+            echo "::error ::Clang toolchain not found at $CLANG_PATH"
+            exit 1
+          fi
+          if [ ! -f "$RUSTC_PATH" ]; then
+            echo "::error ::Rust compiler not found at $RUSTC_PATH"
+            exit 1
+          fi
+          if [ ! -f "$PAHOLE_PATH" ]; then
+            echo "::error ::Pahole not found at $PAHOLE_PATH"
+            exit 1
+          fi
+
+          export PATH="$CLANG_PATH:$PATH"
           
           export CCACHE_COMPILERCHECK="%compiler% -dumpmachine; %compiler% -dumpversion"
           export CCACHE_NOHASHDIR="true"
@@ -394,17 +419,17 @@ jobs:
           export CCACHE_DIR="${{ env.CCACHE_DIR }}"
           export CCACHE_MAXSIZE="8G"
           
-          export KBUILD_BUILD_TIMESTAMP="${KERNEL_TIME}"
+          export KBUILD_BUILD_TIMESTAMP="${{ env.KERNEL_TIME }}"
           
           sudo apt install -y libelf-dev
           
           cd kernel_workspace/kernel_platform/common
           mkdir -p out
-          make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC="ccache clang" RUSTC=../../prebuilts/rust/linux-x86/1.73.0b/bin/rustc PAHOLE=../../prebuilts/kernel-build-tools/linux-x86/bin/pahole LD=ld.lld HOSTLD=ld.lld O=out KCFLAGS+=-O2  gki_defconfig
+          make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC="ccache clang" RUSTC="$RUSTC_PATH" PAHOLE="$PAHOLE_PATH" LD=ld.lld HOSTLD=ld.lld O=out KCFLAGS+=-O2  gki_defconfig
           
           if [ ! -f out/.config ]; then echo "::error ::.config not generated"; exit 1; fi
           
-          make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC="ccache clang" RUSTC=../../prebuilts/rust/linux-x86/1.73.0b/bin/rustc PAHOLE=../../prebuilts/kernel-build-tools/linux-x86/bin/pahole LD=ld.lld HOSTLD=ld.lld O=out KCFLAGS+=-O2  Image
+          make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC="ccache clang" RUSTC="$RUSTC_PATH" PAHOLE="$PAHOLE_PATH" LD=ld.lld HOSTLD=ld.lld O=out KCFLAGS+=-O2  Image
 
       - name: 📦 Apply KPM Patch (应用KPM修补补丁)
         run: |
@@ -418,6 +443,10 @@ jobs:
       - name: 📦 Make AnyKernel3
         run: |
          git clone https://github.com/Kernel-SU/AnyKernel3.git --depth=1      
+         if [ ! -d "./AnyKernel3" ]; then
+           echo "::error ::Failed to clone AnyKernel3 repository"
+           exit 1
+         fi
          rm -rf ./AnyKernel3/.git
          rm -rf ./AnyKernel3/push.sh
          cp kernel_workspace/kernel_platform/common/out/arch/arm64/boot/Image ./AnyKernel3/
