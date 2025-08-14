@@ -48,6 +48,8 @@ jobs:
   build:
     name: Build_${{ github.event.inputs.REPO_MANIFEST }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -457,6 +459,23 @@ jobs:
          name: AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU
          path: ./AnyKernel3/*
          
+      - name: 📢 Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.KSUVER }}
+          name: AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU
+          body: |
+            LZ4 1.10.0
+            KPM
+            SUSFS 1.5.9
+            风驰内核补丁
+          files: |
+            ./AnyKernel3/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: 📊 Post-build disk check (构建后空间检查)
         run: |
           echo "构建后磁盘空间："
