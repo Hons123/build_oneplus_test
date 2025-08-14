@@ -465,12 +465,12 @@ jobs:
           tag_name: v${{ env.KSUVER }}
           name: AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU
           body: |
+            [AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU]
             LZ4 1.10.0
             KPM
             SUSFS 1.5.9
             风驰内核补丁
-          files: |
-            ./AnyKernel3/*
+          files: AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU.zip
           draft: false
           prerelease: false
         env:
