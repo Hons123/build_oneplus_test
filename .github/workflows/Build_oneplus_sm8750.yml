@@ -50,6 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -138,7 +139,7 @@ jobs:
             python3 git curl ccache libelf-dev \
             build-essential flex bison libssl-dev \
             libncurses-dev liblz4-tool zlib1g-dev \
-            libxml2-utils rsync unzip gcc-aarch64-linux-gnu
+            libxml2-utils rsync unzip zip gcc-aarch64-linux-gnu jq
           
           echo "✅ 依赖安装完成"
           
@@ -172,7 +173,6 @@ jobs:
           else
             echo "未安装 ccache，跳过"
           fi
-
 
       - name: 📥 Install repo tool (下载repo工具)
         run: |
@@ -398,7 +398,7 @@ jobs:
           export PATH="/usr/lib/ccache:$PATH"
           CLANG_PATH="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86/clang-r510928/bin"
           RUSTC_PATH="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/prebuilts/rust/linux-x86/1.73.0b/bin/rustc"
-          PAHOLE_PATH="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/prebuilts/kernel-build-tools/linux-x86/bin/pahole"
+          PAHOLE_PATH="$GITHUB_WORKSPACE/kernel_platform/prebuilts/kernel-build-tools/linux-x86/bin/pahole"
 
           if [ ! -d "$CLANG_PATH" ]; then
             echo "::error ::Clang toolchain not found at $CLANG_PATH"
@@ -442,7 +442,7 @@ jobs:
          rm -f Image
          mv oImage Image
          
-      - name: 📦 Make AnyKernel3
+      - name: 📦 Make AnyKernel3 and ZIP
         run: |
          git clone https://github.com/Kernel-SU/AnyKernel3.git --depth=1      
          if [ ! -d "./AnyKernel3" ]; then
@@ -452,20 +452,62 @@ jobs:
          rm -rf ./AnyKernel3/.git
          rm -rf ./AnyKernel3/push.sh
          cp kernel_workspace/kernel_platform/common/out/arch/arm64/boot/Image ./AnyKernel3/
+         zip -r AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU.zip ./AnyKernel3
+         ls -l AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU.zip
 
-      - name: 📤 Upload AnyKernel3 (上传 KPM_AK3包)
+      - name: 📤 Upload AnyKernel3 ZIP (上传 KPM_AK3 ZIP包)
+        id: upload_artifact
         uses: actions/upload-artifact@v4
         with:
          name: AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU
-         path: ./AnyKernel3/*
+         path: AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU.zip
          
+      - name: 📥 Get Artifact Download URL (获取 Artifact 下载 URL)
+        id: get_artifact_url
+        run: |
+          ARTIFACT_NAME="AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU"
+          echo "Fetching artifact URL for $ARTIFACT_NAME"
+          ARTIFACT_INFO=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts")
+          ARTIFACT_URL=$(echo "$ARTIFACT_INFO" | jq -r ".artifacts[] | select(.name == \"$ARTIFACT_NAME\") | .archive_download_url")
+          if [ -z "$ARTIFACT_URL" ]; then
+            echo "::error ::Failed to retrieve artifact download URL for $ARTIFACT_NAME"
+            exit 1
+          fi
+          echo "Artifact download URL: $ARTIFACT_URL"
+          echo "ARTIFACT_URL=$ARTIFACT_URL" >> $GITHUB_ENV
+
+      - name: 📥 Download Artifact (下载 Artifact)
+        run: |
+          mkdir -p ./downloaded_artifact
+          curl -L -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            -o ./downloaded_artifact/AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU.zip \
+            "${{ env.ARTIFACT_URL }}"
+          ls -l ./downloaded_artifact/AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU.zip
+          if [ ! -f "./downloaded_artifact/AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU.zip" ]; then
+            echo "::error ::Failed to download artifact"
+            exit 1
+          fi
+
+      - name: 🛠 Debug Downloaded Artifact
+        run: |
+          echo "Listing files in downloaded_artifact directory:"
+          ls -lR ./downloaded_artifact
+          if [ -f "./downloaded_artifact/AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU.zip" ]; then
+            echo "ZIP file found!"
+          else
+            echo "::error ::ZIP file not found in ./downloaded_artifact"
+            exit 1
+          fi
+
       - name: 📢 Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.KSUVER }}
           name: AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU
           body: |
-            [AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU]
             LZ4 1.10.0
             KPM
             SUSFS 1.5.9
