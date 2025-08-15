@@ -398,7 +398,7 @@ jobs:
           export PATH="/usr/lib/ccache:$PATH"
           CLANG_PATH="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86/clang-r510928/bin"
           RUSTC_PATH="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/prebuilts/rust/linux-x86/1.73.0b/bin/rustc"
-          PAHOLE_PATH="$GITHUB_WORKSPACE/kernel_platform/prebuilts/kernel-build-tools/linux-x86/bin/pahole"
+          PAHOLE_PATH="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/prebuilts/kernel-build-tools/linux-x86/bin/pahole"
 
           if [ ! -d "$CLANG_PATH" ]; then
             echo "::error ::Clang toolchain not found at $CLANG_PATH"
@@ -508,11 +508,12 @@ jobs:
           tag_name: v${{ env.KSUVER }}
           name: AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU
           body: |
+            [AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU]
             LZ4 1.10.0
             KPM
             SUSFS 1.5.9
             风驰内核补丁
-          files: ./downloaded_artifact/AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU.zip
+          files: ./downloaded_artifact/AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU.zip,./downloaded_artifact/AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU
           draft: false
           prerelease: false
         env:
