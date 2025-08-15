@@ -445,6 +445,10 @@ jobs:
       - name: 📦 Make AnyKernel3
         run: |
          git clone https://github.com/Kernel-SU/AnyKernel3.git --depth=1      
+         if [ ! -d "./AnyKernel3" ]; then
+           echo "::error ::Failed to clone AnyKernel3 repository"
+           exit 1
+         fi
          rm -rf ./AnyKernel3/.git
          rm -rf ./AnyKernel3/push.sh
          cp kernel_workspace/kernel_platform/common/out/arch/arm64/boot/Image ./AnyKernel3/
