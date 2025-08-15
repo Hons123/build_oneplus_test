@@ -442,18 +442,12 @@ jobs:
          rm -f Image
          mv oImage Image
          
-      - name: 📦 Make AnyKernel3 and ZIP
+      - name: 📦 Make AnyKernel3
         run: |
          git clone https://github.com/Kernel-SU/AnyKernel3.git --depth=1      
-         if [ ! -d "./AnyKernel3" ]; then
-           echo "::error ::Failed to clone AnyKernel3 repository"
-           exit 1
-         fi
          rm -rf ./AnyKernel3/.git
          rm -rf ./AnyKernel3/push.sh
          cp kernel_workspace/kernel_platform/common/out/arch/arm64/boot/Image ./AnyKernel3/
-         zip -r AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU.zip ./AnyKernel3
-         ls -l AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU.zip
 
       - name: 📤 Upload AnyKernel3 ZIP (上传 KPM_AK3 ZIP包)
         id: upload_artifact
@@ -470,7 +464,7 @@ jobs:
           ARTIFACT_INFO=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts")
-          ARTIFACT_URL=$(echo "$ARTIFACT_INFO" | jq -r ".artifacts[] | select(.name == \"$ARTIFACT_NAME\") | .archive_download_url")
+          ARTIFACT_URL=$(echo "$ARTIFACT_INFO" | jq -r ".artifacts[] | select(.name == \"$ARTIFACT_NAME\") | .url")
           if [ -z "$ARTIFACT_URL" ]; then
             echo "::error ::Failed to retrieve artifact download URL for $ARTIFACT_NAME"
             exit 1
