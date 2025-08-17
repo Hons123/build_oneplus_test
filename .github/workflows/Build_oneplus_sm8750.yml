@@ -213,6 +213,7 @@ jobs:
 
             # Apply patches
             cd ./common
+            patch -p1 < 50_add_susfs_in_gki-android15-6.6.patch
             files=(
             "lib/lz4/lz4_compress.c"
             "lib/lz4/lz4_decompress.c"
