@@ -363,44 +363,63 @@ jobs:
 
       - name: 🔨 Build Kernel (构建内核)
         run: |
-          export PATH="/usr/lib/ccache:$PATH"
-          CLANG_PATH="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86/clang-r510928/bin"
-          RUSTC_PATH="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/prebuilts/rust/linux-x86/1.73.0b/bin/rustc"
-          PAHOLE_PATH="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/prebuilts/kernel-build-tools/linux-x86/bin/pahole"
+         # Set up ccache path
+         export PATH="/usr/lib/ccache:$PATH"
 
-          if [ ! -d "$CLANG_PATH" ]; then
+         # Define toolchain paths
+         CLANG_PATH="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86/clang-r510928/bin"
+         RUSTC_PATH="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/prebuilts/rust/linux-x86/1.73.0b/bin/rustc"
+         PAHOLE_PATH="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/prebuilts/kernel-build-tools/linux-x86/bin/pahole"
+
+         # Check toolchain availability
+         if [ ! -d "$CLANG_PATH" ]; then
             echo "::error ::Clang toolchain not found at $CLANG_PATH"
             exit 1
-          fi
-          if [ ! -f "$RUSTC_PATH" ]; then
+         fi
+         if [ ! -f "$RUSTC_PATH" ]; then
             echo "::error ::Rust compiler not found at $RUSTC_PATH"
             exit 1
-          fi
-          if [ ! -f "$PAHOLE_PATH" ]; then
+         fi
+         if [ ! -f "$PAHOLE_PATH" ]; then
             echo "::error ::Pahole not found at $PAHOLE_PATH"
             exit 1
-          fi
+         fi
 
-          export PATH="$CLANG_PATH:$PATH"
-          
-          export CCACHE_COMPILERCHECK="%compiler% -dumpmachine; %compiler% -dumpversion"
-          export CCACHE_NOHASHDIR="true"
-          export CCACHE_HARDLINK="true"
-          export CCACHE_DIR="${{ env.CCACHE_DIR }}"
-          export CCACHE_MAXSIZE="8G"
-          
-          export KBUILD_BUILD_TIMESTAMP="${{ env.KERNEL_TIME }}"
-          
-          sudo apt install -y libelf-dev
-          
-          cd kernel_workspace/kernel_platform/common
-          mkdir -p out
-          make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC="ccache clang" RUSTC="$RUSTC_PATH" PAHOLE="$PAHOLE_PATH" LD=ld.lld HOSTLD=ld.lld O=out KCFLAGS+=-O2  gki_defconfig
-          
-          if [ ! -f out/.config ]; then echo "::error ::.config not generated"; exit 1; fi
-          
-          make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC="ccache clang" RUSTC="$RUSTC_PATH" PAHOLE="$PAHOLE_PATH" LD=ld.lld HOSTLD=ld.lld O=out KCFLAGS+=-O2  Image
+         # Add Clang to PATH
+         export PATH="$CLANG_PATH:$PATH"
 
+         # Configure ccache for optimal caching
+         export CCACHE_COMPILERCHECK="%compiler% -dumpmachine; %compiler% -dumpversion"
+         export CCACHE_NOHASHDIR="true"
+         export CCACHE_HARDLINK="true"
+         export CCACHE_DIR="${{ env.CCACHE_DIR }}"
+         export CCACHE_MAXSIZE="8G"
+
+         # Set kernel build timestamp
+         export KBUILD_BUILD_TIMESTAMP="${{ env.KERNEL_TIME }}"
+
+         # Install dependencies
+         sudo apt update
+         sudo apt install -y libelf-dev
+
+         # Navigate to kernel source directory
+         cd kernel_workspace/kernel_platform/common
+
+         # Create output directory
+         mkdir -p out
+
+         # Configure kernel with GKI defconfig
+         make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC="ccache clang" RUSTC="$RUSTC_PATH" PAHOLE="$PAHOLE_PATH" LD=ld.lld HOSTLD=ld.lld O=out KCFLAGS+=-O2 KCFLAGS_PERF+=-O3 gki_defconfig
+
+         # Verify .config generation
+         if [ ! -f out/.config ]; then
+            echo "::error ::Failed to generate .config in out/ directory"
+            exit 1
+         fi
+
+         # Build kernel Image
+         make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC="ccache clang" RUSTC="$RUSTC_PATH" PAHOLE="$PAHOLE_PATH" LD=ld.lld HOSTLD=ld.lld O=out KCFLAGS+=-O2 KCFLAGS_PERF+=-O3 Image
+      
       - name: 📦 Apply KPM Patch (应用KPM修补补丁)
         run: |
          cd kernel_workspace/kernel_platform/common/out/arch/arm64/boot
@@ -435,8 +454,12 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-         name: Release ${{ env.DATE }}
-         body: AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU
+         name: Release AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU
+         body: -AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU
+               -LZ4 1.10.0
+               -KPM
+               -SUSFS 1.5.9
+               -风驰内核补丁
          tag_name: v${{ env.KSUVER }}
          files: ./AnyKernel3/*.zip
         env:
