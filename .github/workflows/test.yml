@@ -1,0 +1,71 @@
+name: Build_oneplus_sm8750
+
+on:
+  workflow_dispatch:
+    inputs:
+      REPO_MANIFEST:
+        description: "请选择要编译的机型："
+        required: true
+        type: choice
+        options:
+          - 'oneplus_13'
+          - 'oneplus_ace5_pro'
+          - 'oneplus_13t'
+          - 'oneplus_13s'
+          - 'oneplus_pad_2_pro'
+          - 'oneplus_pad_3'
+        default: 'oneplus_13t'
+
+      keep_original_settings:
+        description: "保持原内核名称及构建时间"
+        default: "true"
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y             bc bison build-essential ccache curl flex git gnupg gperf             libncurses-dev libssl-dev openjdk-11-jdk wget unzip
+
+          mkdir -p ~/bin
+          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+          chmod a+rx ~/bin/repo
+          echo "$HOME/bin" >> $GITHUB_PATH
+
+      - name: Repo init & sync
+        run: |
+          repo init -u https://github.com/OnePlus/android_manifest.git -b main --depth=1
+          repo sync -c -j$(nproc) --no-tags --no-clone-bundle
+
+      - name: Build Kernel
+        run: |
+          export ARCH=arm64
+          export SUBARCH=arm64
+          export PATH=$HOME/bin:$PATH
+          export USE_CCACHE=1
+
+          mkdir -p out
+          if [ "${{ github.event.inputs.REPO_MANIFEST }}" = "oneplus_13" ]; then
+            DEFCONFIG=oneplus_13_defconfig
+          elif [ "${{ github.event.inputs.REPO_MANIFEST }}" = "oneplus_ace5_pro" ]; then
+            DEFCONFIG=oneplus_ace5_pro_defconfig
+          else
+            DEFCONFIG=oneplus_defconfig
+          fi
+
+          make O=out $DEFCONFIG
+          make O=out -j$(nproc)
+
+      - name: Upload Kernel Image
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-out
+          path: |
+            out/arch/arm64/boot/Image*
+            out/arch/arm64/boot/dtb*
