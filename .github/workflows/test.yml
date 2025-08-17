@@ -50,10 +50,8 @@ jobs:
     permissions:
       contents: write
     env:
-      CCACHE_DIR: ${{ runner.temp }}/.ccache_${{ github.event.inputs.REPO_MANIFEST }}
-      CCACHE_MAXSIZE: 8G
       KERNEL_WORKSPACE: kernel_workspace
-      APT_CACHE_DIR: ${{ runner.temp }}/apt-cache
+      CCACHE_MAXSIZE: 8G
     steps:
       - uses: actions/checkout@v4
         with:
@@ -100,18 +98,22 @@ jobs:
           fi
           echo "KERNEL_SUFFIX=$KERNEL_SUFFIX" >> $GITHUB_ENV
 
+          # Set dynamic temp paths
+          echo "CCACHE_DIR=${{ runner.temp }}/.ccache_${{ github.event.inputs.REPO_MANIFEST }}" >> $GITHUB_ENV
+          echo "APT_CACHE_DIR=${{ runner.temp }}/apt-cache" >> $GITHUB_ENV
+
       - name: 🛠 Configure Git and APT
         run: |
           git config --global user.name "AnkoleNeon"
           git config --global user.email "ankole@foxmail.com"
 
-          mkdir -p "${{ env.APT_CACHE_DIR }}"/{archives,lists/partial}
-          echo "Dir::Cache \"${{ env.APT_CACHE_DIR }}\";" | sudo tee /etc/apt/apt.conf.d/90user-cache
-          echo "Dir::Cache::archives \"${{ env.APT_CACHE_DIR }}/archives\";" | sudo tee -a /etc/apt/apt.conf.d/90user-cache
-          echo "Dir::State::lists \"${{ env.APT_CACHE_DIR }}/lists\";" | sudo tee -a /etc/apt/apt.conf.d/90user-cache
+          mkdir -p "${APT_CACHE_DIR}"/{archives,lists/partial}
+          echo "Dir::Cache \"${APT_CACHE_DIR}\";" | sudo tee /etc/apt/apt.conf.d/90user-cache
+          echo "Dir::Cache::archives \"${APT_CACHE_DIR}/archives\";" | sudo tee -a /etc/apt/apt.conf.d/90user-cache
+          echo "Dir::State::lists \"${APT_CACHE_DIR}/lists\";" | sudo tee -a /etc/apt/apt.conf.d/90user-cache
           echo "Acquire::Check-Valid-Until \"false\";" | sudo tee -a /etc/apt/apt.conf.d/90user-cache
           echo "Acquire::Languages \"none\";" | sudo tee -a /etc/apt/apt.conf.d/90user-cache
-          sudo chown -R $USER:$USER "${{ env.APT_CACHE_DIR }}"
+          sudo chown -R $USER:$USER "${APT_CACHE_DIR}"
 
       - name: 🛠 Cache APT packages
         uses: actions/cache@v4
@@ -137,7 +139,7 @@ jobs:
           export CCACHE_COMPILERCHECK="%compiler% -dumpmachine; %compiler% -dumpversion"
           export CCACHE_NOHASHDIR="true"
           export CCACHE_HARDLINK="true"
-          ccache -M "${{ env.CCACHE_MAXSIZE }}" || true
+          ccache -M "${CCACHE_MAXSIZE}" || true
 
           curl https://storage.googleapis.com/git-repo-downloads/repo > /tmp/repo && chmod +x /tmp/repo && sudo mv /tmp/repo /usr/local/bin/repo
 
