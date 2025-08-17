@@ -267,7 +267,7 @@ jobs:
       - name: 🔧 Set gki_defconfig (设置编译配置)
         run: |
           cd kernel_workspace/kernel_platform
-          CONFIG_FILE=./common/arch/arm64/configs/gki_defconfig
+          CONFIG_FILE="${{ github.workspace }}/kernel_workspace/kernel_platform/common/arch/arm64/configs/gki_defconfig"
           echo "CONFIG_KSU=y" >> "$CONFIG_FILE"
           # SUSFS
           echo "CONFIG_KSU_SUSFS=y" >> "$CONFIG_FILE"
