@@ -10,10 +10,9 @@ on:
           - 'oneplus_13'
           - 'oneplus_ace5_pro'
           - 'oneplus_13t'
+          - 'oneplus_13s'
           - 'oneplus_pad_2_pro'
-          - 'oneplus_ace5_ultra'
-          - 'realme_GT7pro'
-          - 'realme_GT7pro_Speed'
+          - 'oneplus_pad_3'
         default: 'oneplus_13t'
 
       keep_original_settings:
@@ -32,13 +31,13 @@ on:
         required: false
         default: ''
 
-      enable_feature_z:
-        description: "添加风驰驱动"
+      enable_feature_kpm:
+        description: "KPM"
         required: false
         default: true
         type: boolean
 
-      enable_feature_b:
+      enable_feature_bbr:
         description: "添加BBR控制算法"
         required: false
         default: false
@@ -83,17 +82,14 @@ jobs:
             echo "KERNEL_TIME=${{ github.event.inputs.custom_kernel_time }}" >> $GITHUB_ENV
           else
             case "${{ env.DEVICES_NAME }}" in
-              oneplus_13 | oneplus_ace5_pro | realme_GT7pro | realme_GT7pro_Speed)
+              oneplus_13 | oneplus_ace5_pro)
                 echo 'KERNEL_TIME=Tue Dec 17 23:36:49 UTC 2024' >> $GITHUB_ENV
                 ;;
-              oneplus_13t)
+              oneplus_13t | oneplus_13s)
                 echo 'KERNEL_TIME=Tue Jun 10 12:12:23 UTC 2025' >> $GITHUB_ENV
                 ;;
-              oneplus_pad_2_pro)
-                echo 'KERNEL_TIME=Tue Mar 4 09:04:13 UTC 2025' >> $GITHUB_ENV
-                ;;
-              oneplus_ace5_ultra)
-                echo 'KERNEL_TIME=Fri Apr 18 19:35:07 UTC 2025' >> $GITHUB_ENV
+              oneplus_pad_2_pro | oneplus_pad_3)
+                echo 'KERNEL_TIME=Tue Jun 3 03:22:33 UTC 2025' >> $GITHUB_ENV
                 ;;
             esac
           fi
@@ -217,45 +213,21 @@ jobs:
 
             # Apply patches
             cd ./common
-            if [ "${{ env.DEVICES_NAME }}" != "oneplus_ace5_ultra" ]; then
-                files=(
-                    "lib/lz4/lz4_compress.c"
-                    "lib/lz4/lz4_decompress.c"
-                    "lib/lz4/lz4defs.h"
-                    "lib/lz4/lz4hc_compress.c"
-                )
-                for file in "${files[@]}"; do
-                    if [ -e "$file" ]; then
-                        rm "$file"
-                    fi
-                done
-
-            cp -r ../../lz4_patch/zram/lz4/* ./lib/lz4/
-            cp -r ../../lz4_patch/zram/include/linux/* ./include/linux/
-            cp -r ../../lz4_patch/zram/6.6/lz4_1.10.0.patch ./
-
-            if ! patch -p1 -F 3 --fuzz=5 < lz4_1.10.0.patch; then
-              echo "::error ::Failed to apply lz4_1.10.0.patch"
-              exit 1
-            fi
-    
-            if [ "${{ env.REPO_MANIFEST }}" != "oneplus_13t" ] && [ "${{ env.REPO_MANIFEST }}" != "oneplus_ace5_ultra" ] && [ "${{ env.REPO_MANIFEST }}" != "oneplus_pad_2_pro" ]; then
-            echo "修复内核版本6.6部分机型缺失Trusty OS导致的susfs的报错"
-            sed -i 's/-32,12 +32,38/-32,11 +32,37/g' 50_add_susfs_in_gki-android15-6.6.patch
-            sed -i '/#include <trace\/hooks\/fs.h>/d' 50_add_susfs_in_gki-android15-6.6.patch
-            fi
-            fi  
-    
-            if ! patch -p1 < 50_add_susfs_in_gki-android15-6.6.patch; then
-              echo "::error ::Failed to apply 50_add_susfs_in_gki-android15-6.6.patch"
-              exit 1
-            fi
-            cp ../../SukiSU_patch/hooks/syscall_hooks.patch ./
-            if ! patch -p1 -F 3 < syscall_hooks.patch; then
-              echo "::error ::Failed to apply syscall_hooks.patch"
-              exit 1
-            fi
-            
+            files=(
+            "lib/lz4/lz4_compress.c"
+            "lib/lz4/lz4_decompress.c"
+            "lib/lz4/lz4defs.h"
+            "lib/lz4/lz4hc_compress.c"
+            )
+            for file in "${files[@]}"; do
+              if [ -e "$file" ]; then
+                  rm "$file"
+              fi
+            done
+            cp -r "${GITHUB_WORKSPACE}"/zram/lz4/* ./lib/lz4/
+            cp -r "${GITHUB_WORKSPACE}"/zram/include/linux/* ./include/linux/
+            cp -r "${GITHUB_WORKSPACE}"/zram/6.6/lz4_1.10.0.patch ./
+            patch -p1 -F 3 --fuzz=5 < lz4_1.10.0.patch
             echo "完成"
 
       - name: 🔧 Cache HMBird patch (缓存HMBird补丁)
@@ -290,42 +262,41 @@ jobs:
 
     
       - name: 🔧 Set gki_defconfig (设置编译配置)
-        env:
-          ENABLE_B: ${{ github.event.inputs.enable_feature_b }}       
         run: |
           cd kernel_workspace/kernel_platform
-          echo "CONFIG_KSU=y" >> ./common/arch/arm64/configs/gki_defconfig
-          # Add VFS configuration settings
-          echo "CONFIG_KSU_SUSFS_SUS_SU=n" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_MANUAL_HOOK=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KPM=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_CRYPTO_LZ4=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_CRYPTO_LZ4HC=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_CRYPTO_LZ4KD=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_CRYPTO_ZSTD=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_F2FS_FS_COMPRESSION=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_F2FS_FS_LZ4=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_F2FS_FS_LZ4HC=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_F2FS_FS_ZSTD=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KERNEL_LZ4=y" >> ./common/arch/arm64/configs/gki_defconfig          
-          # Add SUSFS configuration settings
-          echo "CONFIG_KSU_SUSFS=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> ./common/arch/arm64/configs/gki_defconfig
-          # Add BBR
-          if [ "$ENABLE_B" = "true" ]; then
+          CONFIG_FILE=./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_KSU=y" >> "$CONFIG_FILE"
+          # SUSFS
+          echo "CONFIG_KSU_SUSFS=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> "$CONFIG_FILE"
+          # VFS
+          echo "CONFIG_KSU_SUSFS_SUS_SU=n" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_MANUAL_HOOK=y" >> "$CONFIG_FILE"
+          # ZRAM
+          echo "CONFIG_CRYPTO_LZ4=y" >> "$CONFIG_FILE"
+          echo "CONFIG_CRYPTO_LZ4HC=y" >> "$CONFIG_FILE"
+          echo "CONFIG_F2FS_FS_LZ4=y" >> "$CONFIG_FILE"
+          echo "CONFIG_F2FS_FS_LZ4HC=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KERNEL_LZ4=y" >> "$CONFIG_FILE"
+          # KPM
+          if [ "${{ github.event.inputs.enable_feature_kpm }}" = "true" ]; then
+            echo "CONFIG_KPM=y" >> "$CONFIG_FILE"
+          fi
+          # bbr
+          if [ "${{ github.event.inputs.enable_feature_bbr }}" = "true" ]; then
             echo "CONFIG_TCP_CONG_ADVANCED=y" >> ./common/arch/arm64/configs/gki_defconfig
             echo "CONFIG_TCP_CONG_BBR=y" >> ./common/arch/arm64/configs/gki_defconfig
             echo "CONFIG_NET_SCH_FQ=y" >> ./common/arch/arm64/configs/gki_defconfig
@@ -335,7 +306,7 @@ jobs:
             echo "CONFIG_TCP_CONG_HTCP=n" >> ./common/arch/arm64/configs/gki_defconfig
             echo "CONFIG_DEFAULT_TCP_CONG=bbr" >> ./common/arch/arm64/configs/gki_defconfig
           fi
-          #Remove check_defconfig
+          # Remove check_defconfig
           sudo sed -i 's/check_defconfig//' ./common/build.config.gki
           cd common
           git add -A && git commit -a -m "BUILD Kernel"
@@ -349,17 +320,14 @@ jobs:
           cd kernel_workspace/kernel_platform
 
           case "${{ env.DEVICES_NAME }}" in
-            oneplus_13 | oneplus_ace5_pro | realme_GT7pro | realme_GT7pro_Speed)
+            oneplus_13 | oneplus_ace5_pro)
               DEFAULT_SUFFIX="-android15-8-g013ec21bba94-abogki383916444-4k"
               ;;
-            oneplus_13t)
-              DEFAULT_SUFFIX="-android15-8-gd43086512890-abogki423825152-4k"
+            oneplus_13t | oneplus_13s)
+              DEFAULT_SUFFIX="-androd15-8-g29d86c5fc9dd-abogki428889875-4k "
               ;;
-            oneplus_pad_2_pro)
-              DEFAULT_SUFFIX="-android15-8-g302cb15749a8-ab13157299-4k"
-              ;;
-            oneplus_ace5_ultra)
-              DEFAULT_SUFFIX="-android15-8-gfc70d29746a7-abogki412262948-4k"
+            oneplus_pad_2_pro | oneplus_pad_3)
+              DEFAULT_SUFFIX="-android15-8-g7b1f455c7143-ab13591283-4k"
               ;;
           esac
           
@@ -383,7 +351,6 @@ jobs:
           sed -i 's/${scm_version}//' ./common/scripts/setlocalversion
           
       - name: 🔧 Add sched_ext (写入风驰补丁)
-        if: ${{ github.event.inputs.enable_feature_z }}
         run: |
          cd kernel_workspace/kernel_platform/
          git clone https://github.com/HanKuCha/sched_ext.git
@@ -456,7 +423,22 @@ jobs:
         with:
          name: AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU
          path: ./AnyKernel3/*
-         
+
+      - name: Create AnyKernel3 ZIP
+        run: |
+         cd ./AnyKernel3/
+         zip -r ./AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU.zip *
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+         name: Release ${{ env.DATE }}
+         body: AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU
+         tag_name: v${{ env.KSUVER }}
+         files: ./AnyKernel3/*.zip
+        env:
+         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
       - name: 📊 Post-build disk check (构建后空间检查)
         run: |
           echo "构建后磁盘空间："
