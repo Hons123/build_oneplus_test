@@ -300,17 +300,17 @@ jobs:
           fi
           # bbr
           if [ "${{ github.event.inputs.enable_feature_bbr }}" = "true" ]; then
-            echo "CONFIG_TCP_CONG_ADVANCED=y" >> ./common/arch/arm64/configs/gki_defconfig
-            echo "CONFIG_TCP_CONG_BBR=y" >> ./common/arch/arm64/configs/gki_defconfig
-            echo "CONFIG_NET_SCH_FQ=y" >> ./common/arch/arm64/configs/gki_defconfig
-            echo "CONFIG_TCP_CONG_BIC=n" >> ./common/arch/arm64/configs/gki_defconfig
-            echo "CONFIG_TCP_CONG_CUBIC=n" >> ./common/arch/arm64/configs/gki_defconfig
-            echo "CONFIG_TCP_CONG_WESTWOOD=n" >> ./common/arch/arm64/configs/gki_defconfig
-            echo "CONFIG_TCP_CONG_HTCP=n" >> ./common/arch/arm64/configs/gki_defconfig
-            echo "CONFIG_DEFAULT_TCP_CONG=bbr" >> ./common/arch/arm64/configs/gki_defconfig
+            echo "CONFIG_TCP_CONG_ADVANCED=y" >> "$CONFIG_FILE"
+            echo "CONFIG_TCP_CONG_BBR=y" >> "$CONFIG_FILE"
+            echo "CONFIG_NET_SCH_FQ=y" >> "$CONFIG_FILE"
+            echo "CONFIG_TCP_CONG_BIC=n" >> "$CONFIG_FILE"
+            echo "CONFIG_TCP_CONG_CUBIC=n" >> "$CONFIG_FILE"
+            echo "CONFIG_TCP_CONG_WESTWOOD=n" >> "$CONFIG_FILE"
+            echo "CONFIG_TCP_CONG_HTCP=n" >> "$CONFIG_FILE"
+            echo "CONFIG_DEFAULT_TCP_CONG=bbr" >> "$CONFIG_FILE"
           fi
           # Remove check_defconfig
-          sudo sed -i 's/check_defconfig//' ./common/build.config.gki
+          sed -i 's/check_defconfig//' ./common/build.config.gki
           cd common
           git add -A && git commit -a -m "BUILD Kernel"
 
