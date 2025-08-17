@@ -1,0 +1,296 @@
+name: Build_oneplus_sm8750
+on:
+  workflow_dispatch:
+    inputs:
+      REPO_MANIFEST:
+        description: "请选择要编译的机型："
+        required: true
+        type: choice
+        options:
+          - 'oneplus_13'
+          - 'oneplus_ace5_pro'
+          - 'oneplus_13t'
+          - 'oneplus_13s'
+          - 'oneplus_pad_2_pro'
+          - 'oneplus_pad_3'
+        default: 'oneplus_13t'
+
+      keep_original_settings:
+        description: "保持原内核名称及构建时间"
+        required: false
+        default: true
+        type: boolean
+
+      custom_kernel_suffix:
+        description: "✏️ 自定义内核名称 - 仅在取消勾选'保持原设置'时有效"
+        required: false
+        default: ''
+
+      custom_kernel_time:
+        description: "⏰ 自定义构建时间 - 仅在取消勾选'保持原设置'时有效"
+        required: false
+        default: ''
+
+      enable_feature_kpm:
+        description: "KPM"
+        required: false
+        default: true
+        type: boolean
+
+      enable_feature_bbr:
+        description: "添加BBR控制算法"
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  build:
+    name: Build_${{ github.event.inputs.REPO_MANIFEST }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      CCACHE_DIR: ${{ runner.temp }}/.ccache_${{ github.event.inputs.REPO_MANIFEST }}
+      CCACHE_MAXSIZE: 8G
+      KERNEL_WORKSPACE: kernel_workspace
+      APT_CACHE_DIR: ${{ runner.temp }}/apt-cache
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 📊 Check disk space
+        run: df -h
+
+      - name: ⚙️ Set variables
+        run: |
+          # Set REPO_MANIFEST and DEVICES_NAME
+          case "${{ github.event.inputs.REPO_MANIFEST }}" in
+            oneplus_ace5_pro) REPO_MANIFEST="JiuGeFaCai_oneplus_ace5_pro_v"; DEVICES_NAME="oneplus_ace5_pro" ;;
+            oneplus_13) REPO_MANIFEST="JiuGeFaCai_oneplus_13_v"; DEVICES_NAME="oneplus_13" ;;
+            *) REPO_MANIFEST="${{ github.event.inputs.REPO_MANIFEST }}"; DEVICES_NAME="${{ github.event.inputs.REPO_MANIFEST }}" ;;
+          esac
+          echo "REPO_MANIFEST=$REPO_MANIFEST" >> $GITHUB_ENV
+          echo "DEVICES_NAME=$DEVICES_NAME" >> $GITHUB_ENV
+
+          # Set KERNEL_TIME
+          if [ "${{ github.event.inputs.keep_original_settings }}" = "false" ] && [ -n "${{ github.event.inputs.custom_kernel_time }}" ]; then
+            KERNEL_TIME="${{ github.event.inputs.custom_kernel_time }}"
+          else
+            case "$DEVICES_NAME" in
+              oneplus_13|oneplus_ace5_pro) KERNEL_TIME="Tue Dec 17 23:36:49 UTC 2024" ;;
+              oneplus_13t|oneplus_13s) KERNEL_TIME="Tue Jun 10 12:12:23 UTC 2025" ;;
+              oneplus_pad_2_pro|oneplus_pad_3) KERNEL_TIME="Tue Jun 3 03:22:33 UTC 2025" ;;
+            esac
+          fi
+          echo "KERNEL_TIME=$KERNEL_TIME" >> $GITHUB_ENV
+
+          # Set KERNEL_SUFFIX
+          KEEP_ORIGINAL="${{ github.event.inputs.keep_original_settings }}"
+          CUSTOM_SUFFIX="${{ github.event.inputs.custom_kernel_suffix }}"
+          case "$DEVICES_NAME" in
+            oneplus_13|oneplus_ace5_pro) DEFAULT_SUFFIX="-android15-8-g013ec21bba94-abogki383916444-4k" ;;
+            oneplus_13t|oneplus_13s) DEFAULT_SUFFIX="-androd15-8-g29d86c5fc9dd-abogki428889875-4k" ;;
+            oneplus_pad_2_pro|oneplus_pad_3) DEFAULT_SUFFIX="-android15-8-g7b1f455c7143-ab13591283-4k" ;;
+          esac
+          if [ "$KEEP_ORIGINAL" = "false" ] && [ -n "$CUSTOM_SUFFIX" ]; then
+            KERNEL_SUFFIX="$CUSTOM_SUFFIX"
+          else
+            KERNEL_SUFFIX="$DEFAULT_SUFFIX"
+          fi
+          echo "KERNEL_SUFFIX=$KERNEL_SUFFIX" >> $GITHUB_ENV
+
+      - name: 🛠 Configure Git and APT
+        run: |
+          git config --global user.name "AnkoleNeon"
+          git config --global user.email "ankole@foxmail.com"
+
+          mkdir -p "${{ env.APT_CACHE_DIR }}"/{archives,lists/partial}
+          echo "Dir::Cache \"${{ env.APT_CACHE_DIR }}\";" | sudo tee /etc/apt/apt.conf.d/90user-cache
+          echo "Dir::Cache::archives \"${{ env.APT_CACHE_DIR }}/archives\";" | sudo tee -a /etc/apt/apt.conf.d/90user-cache
+          echo "Dir::State::lists \"${{ env.APT_CACHE_DIR }}/lists\";" | sudo tee -a /etc/apt/apt.conf.d/90user-cache
+          echo "Acquire::Check-Valid-Until \"false\";" | sudo tee -a /etc/apt/apt.conf.d/90user-cache
+          echo "Acquire::Languages \"none\";" | sudo tee -a /etc/apt/apt.conf.d/90user-cache
+          sudo chown -R $USER:$USER "${{ env.APT_CACHE_DIR }}"
+
+      - name: 🛠 Cache APT packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.APT_CACHE_DIR }}
+          key: ${{ runner.os }}-apt-${{ hashFiles('.github/workflows/Build_oneplus_sm8750.yml') }}
+          restore-keys: ${{ runner.os }}-apt-
+
+      - name: 📦 Install dependencies
+        run: |
+          sudo apt update -qq
+          sudo apt install -yq --no-install-recommends python3 git curl ccache libelf-dev build-essential flex bison libssl-dev libncurses-dev liblz4-tool zlib1g-dev libxml2-utils rsync unzip gcc-aarch64-linux-gnu
+
+      - name: 📥 Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-${{ runner.os }}-${{ github.ref }}-${{ env.REPO_MANIFEST }}
+          restore-keys: ccache-${{ runner.os }}-${{ env.REPO_MANIFEST }}-
+
+      - name: 📥 Init ccache and repo tool
+        run: |
+          export CCACHE_COMPILERCHECK="%compiler% -dumpmachine; %compiler% -dumpversion"
+          export CCACHE_NOHASHDIR="true"
+          export CCACHE_HARDLINK="true"
+          ccache -M "${{ env.CCACHE_MAXSIZE }}" || true
+
+          curl https://storage.googleapis.com/git-repo-downloads/repo > /tmp/repo && chmod +x /tmp/repo && sudo mv /tmp/repo /usr/local/bin/repo
+
+      - name: 📥 Sync kernel source
+        run: |
+          mkdir ${{ env.KERNEL_WORKSPACE }} && cd ${{ env.KERNEL_WORKSPACE }}
+          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/sm8750 -m ${{ env.REPO_MANIFEST }}.xml --depth=1
+          repo sync -c -j$(nproc --all) --no-tags || exit 1
+          rm kernel_platform/common/android/abi_gki_protected_exports_* || true
+          rm kernel_platform/msm-kernel/android/abi_gki_protected_exports_* || true
+
+      - name: 🔧 Apply patches (SuKiSU, SUSFS, LZ4, HMBird, sched_ext)
+        run: |
+          cd ${{ env.KERNEL_WORKSPACE }}/kernel_platform
+          git clone https://github.com/SukiSU-Ultra/SukiSU-Ultra.git -b susfs-main && bash SukiSU-Ultra/kernel/setup.sh susfs-main || exit 1
+          cd KernelSU
+          KSU_VERSION=$(expr $(git rev-list --count main) + 10700)
+          echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
+          sed -i "s/DKSU_VERSION=12800/DKSU_VERSION=${KSU_VERSION}/" kernel/Makefile || exit 1
+
+          cd ../../
+          git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android15-6.6 || exit 1
+          git clone https://github.com/SukiSU-Ultra/SukiSU_patch.git || exit 1
+          git clone https://github.com/AnkoleNeon/build_oneplus_test.git lz4_patch || exit 1
+
+          cd kernel_platform/common
+          cp ../../susfs4ksu/kernel_patches/50_add_susfs_in_gki-android15-6.6.patch . || exit 1
+          cp -r ../../susfs4ksu/kernel_patches/fs/* fs/ || exit 1
+          cp -r ../../susfs4ksu/kernel_patches/include/linux/* include/linux/ || exit 1
+          cp -r ../../SukiSU_patch/other/zram/lz4k/include/linux/* include/linux/ || exit 1
+          cp -r ../../SukiSU_patch/other/zram/lz4k/crypto/* crypto/ || exit 1
+          cp -r ../../SukiSU_patch/other/zram/lz4k_oplus lib/ || exit 1
+
+          patch -p1 < 50_add_susfs_in_gki-android15-6.6.patch || exit 1
+          rm -f lib/lz4/{lz4_compress.c,lz4_decompress.c,lz4defs.h,lz4hc_compress.c} || true
+          cp -r "${GITHUB_WORKSPACE}"/zram/lz4/* lib/lz4/ || exit 1
+          cp -r "${GITHUB_WORKSPACE}"/zram/include/linux/* include/linux/ || exit 1
+          cp "${GITHUB_WORKSPACE}"/zram/6.6/lz4_1.10.0.patch . || exit 1
+          patch -p1 -F 3 --fuzz=5 < lz4_1.10.0.patch || exit 1
+
+          # HMBird patch (cache it)
+          PATCH_FILE="${{ runner.temp }}/hmbird_patch.c"
+          if [ ! -f "$PATCH_FILE" ]; then
+            cp "${GITHUB_WORKSPACE}/hmbird_patch.c" "$PATCH_FILE" || exit 1
+          fi
+          cp "$PATCH_FILE" drivers/hmbird_patch.c || exit 1
+          grep -q "hmbird_patch.o" drivers/Makefile || echo "obj-y += hmbird_patch.o" >> drivers/Makefile
+
+          # sched_ext
+          cd ../..
+          git clone https://github.com/HanKuCha/sched_ext.git || exit 1
+          cp -r sched_ext/* common/kernel/sched/ || exit 1
+
+      - name: 🔧 Cache HMBird patch
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/hmbird_patch.c
+          key: hmbird-patch-v1
+
+      - name: 🔧 Configure kernel (gki_defconfig)
+        run: |
+          CONFIG_FILE="${{ env.KERNEL_WORKSPACE }}/kernel_platform/common/arch/arm64/configs/gki_defconfig"
+          echo "CONFIG_KSU=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_SUS_SU=n" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_MANUAL_HOOK=y" >> "$CONFIG_FILE"
+          echo "CONFIG_CRYPTO_LZ4=y" >> "$CONFIG_FILE"
+          echo "CONFIG_CRYPTO_LZ4HC=y" >> "$CONFIG_FILE"
+          echo "CONFIG_F2FS_FS_LZ4=y" >> "$CONFIG_FILE"
+          echo "CONFIG_F2FS_FS_LZ4HC=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KERNEL_LZ4=y" >> "$CONFIG_FILE"
+          [ "${{ github.event.inputs.enable_feature_kpm }}" = "true" ] && echo "CONFIG_KPM=y" >> "$CONFIG_FILE"
+          if [ "${{ github.event.inputs.enable_feature_bbr }}" = "true" ]; then
+            echo "CONFIG_TCP_CONG_ADVANCED=y" >> "$CONFIG_FILE"
+            echo "CONFIG_TCP_CONG_BBR=y" >> "$CONFIG_FILE"
+            echo "CONFIG_NET_SCH_FQ=y" >> "$CONFIG_FILE"
+            echo "CONFIG_TCP_CONG_BIC=n" >> "$CONFIG_FILE"
+            echo "CONFIG_TCP_CONG_CUBIC=n" >> "$CONFIG_FILE"
+            echo "CONFIG_TCP_CONG_WESTWOOD=n" >> "$CONFIG_FILE"
+            echo "CONFIG_TCP_CONG_HTCP=n" >> "$CONFIG_FILE"
+            echo "CONFIG_DEFAULT_TCP_CONG=bbr" >> "$CONFIG_FILE"
+          fi
+          sed -i 's/check_defconfig//' ${{ env.KERNEL_WORKSPACE }}/kernel_platform/common/build.config.gki
+          sed -i "s/-4k/${{ env.KERNEL_SUFFIX }}/g" "$CONFIG_FILE" || exit 1
+          sed -i 's/${scm_version}//' ${{ env.KERNEL_WORKSPACE }}/kernel_platform/common/scripts/setlocalversion
+          cd ${{ env.KERNEL_WORKSPACE }}/kernel_platform/common
+          git add -A && git commit -a -m "BUILD Kernel" || exit 1
+
+      - name: 🔨 Build Kernel
+        run: |
+          export PATH="/usr/lib/ccache:$PATH"
+          CLANG_PATH="${{ env.KERNEL_WORKSPACE }}/kernel_platform/prebuilts/clang/host/linux-x86/clang-r510928/bin"
+          RUSTC_PATH="${{ env.KERNEL_WORKSPACE }}/kernel_platform/prebuilts/rust/linux-x86/1.73.0b/bin/rustc"
+          PAHOLE_PATH="${{ env.KERNEL_WORKSPACE }}/kernel_platform/prebuilts/kernel-build-tools/linux-x86/bin/pahole"
+          [ -d "$CLANG_PATH" ] || exit 1
+          [ -f "$RUSTC_PATH" ] || exit 1
+          [ -f "$PAHOLE_PATH" ] || exit 1
+          export PATH="$CLANG_PATH:$PATH"
+          export KBUILD_BUILD_TIMESTAMP="${{ env.KERNEL_TIME }}"
+
+          cd ${{ env.KERNEL_WORKSPACE }}/kernel_platform/common
+          mkdir -p out
+          make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC="ccache clang" RUSTC="$RUSTC_PATH" PAHOLE="$PAHOLE_PATH" LD=ld.lld HOSTLD=ld.lld O=out KCFLAGS+=-O2 KCFLAGS_PERF+=-O3 gki_defconfig || exit 1
+          [ -f out/.config ] || exit 1
+          make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC="ccache clang" RUSTC="$RUSTC_PATH" PAHOLE="$PAHOLE_PATH" LD=ld.lld HOSTLD=ld.lld O=out KCFLAGS+=-O2 KCFLAGS_PERF+=-O3 Image || exit 1
+
+      - name: 📦 Apply KPM Patch and Package
+        run: |
+          cd ${{ env.KERNEL_WORKSPACE }}/kernel_platform/common/out/arch/arm64/boot
+          curl -LO https://github.com/SukiSU-Ultra/SukiSU_patch/raw/refs/heads/main/kpm/patch_linux || exit 1
+          chmod +x patch_linux
+          ./patch_linux || exit 1
+          rm -f Image
+          mv oImage Image
+
+          git clone https://github.com/Kernel-SU/AnyKernel3.git --depth=1 || exit 1
+          rm -rf AnyKernel3/.git AnyKernel3/push.sh
+          cp Image AnyKernel3/ || exit 1
+          cd AnyKernel3
+          zip -r AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU.zip * || exit 1
+
+      - name: 📤 Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU
+          path: ${{ env.KERNEL_WORKSPACE }}/kernel_platform/common/out/arch/arm64/boot/AnyKernel3/*
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Release AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU
+          body: |
+            - AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU
+            - LZ4 1.10.0
+            - KPM
+            - SUSFS 1.5.9
+            - 风驰内核补丁
+          tag_name: v${{ env.KSUVER }}
+          files: ${{ env.KERNEL_WORKSPACE }}/kernel_platform/common/out/arch/arm64/boot/AnyKernel3/*.zip
+
+      - name: 📊 Post-build disk check
+        run: df -h
