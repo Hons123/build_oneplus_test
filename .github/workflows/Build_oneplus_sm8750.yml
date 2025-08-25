@@ -216,9 +216,14 @@ jobs:
             cp ../susfs4ksu/kernel_patches/fs/* ./common/fs/
             cp ../susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
 
-            cp -r ../SukiSU_patch/other/zram/lz4k/include/linux/* ./common/include/linux
-            cp -r ../SukiSU_patch/other/zram/lz4k/crypto/* ./common/crypto
+            cp -r ../SukiSU_patch/other/zram/lz4k/include/linux/* ./common/include/linux/
+            cp -r ../SukiSU_patch/other/zram/lz4k/lib/* ./common/lib/
+            cp -r ../SukiSU_patch/other/zram/lz4k/crypto/* ./common/crypto/
             cp -r ../SukiSU_patch/other/zram/lz4k_oplus ./common/lib/
+
+            if [ "${REPO_MANIFEST}" != "oneplus_13t" ] && [ "${REPO_MANIFEST}" != "oneplus_13s" ]; then
+            sed -i 's/^\(SUBLEVEL[[:space:]]*=[[:space:]]*\).*/\166/' ./common/Makefile
+            fi
 
             cd ./common
             if [ "${REPO_MANIFEST}" != "oneplus_13t" ] && [ "${REPO_MANIFEST}" != "oneplus_13s" ] && [ "${REPO_MANIFEST}" != "oneplus_pad_2_pro" ]&& [ "${REPO_MANIFEST}" != "oneplus_pad_3" ]; then
@@ -399,6 +404,7 @@ jobs:
             echo "CONFIG_CRYPTO_LZ4K_OPLUS=y" >> "$CONFIG_FILE"
             echo "CONFIG_ZRAM_WRITEBACK=y" >> "$CONFIG_FILE"
           fi
+          
           echo "CONFIG_LZ4V2_COMPRESS=y" >> "$CONFIG_FILE"
           echo "CONFIG_LZ4V2_HC=y" >> "$CONFIG_FILE"
           echo "CONFIG_LZ4V2_DEBUG=n" >> "$CONFIG_FILE"
