@@ -584,37 +584,46 @@ jobs:
          rm -rf ./AnyKernel3/push.sh
          cp kernel_workspace/kernel_platform/common/out/arch/arm64/boot/Image ./AnyKernel3/
 
+      - name: 📦 创建AK3 ZIP
+        run: |
+          cd ./AnyKernel3/
+          # Construct package name based on KPM input
+          BASE_NAME="AK3_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU"
+          if [ "${{ github.event.inputs.KPM }}" = "true" ]; then
+            PACKAGE_NAME="${BASE_NAME}_KPM.zip"
+          else
+            PACKAGE_NAME="${BASE_NAME}.zip"
+          fi
+          echo "Creating ZIP package: $PACKAGE_NAME"
+          zip -r "$PACKAGE_NAME" *
+          echo "PACKAGE_NAME=$PACKAGE_NAME" >> $GITHUB_ENV
+
       - name: 📤 上传AK3包
         uses: actions/upload-artifact@v4
         with:
-         name: AK3_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU
-         path: ./AnyKernel3/*
+          name: ${{ env.PACKAGE_NAME }}
+          path: ./AnyKernel3/*.zip
 
-      - name: 📦 创建AK3 ZIP
-        run: |
-         cd ./AnyKernel3/
-         zip -r ./AK3_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU.zip *
-
-      - name: 📤创建发布
+      - name: 📤 创建发布
         uses: softprops/action-gh-release@v1
         with:
-         name: Release AK3_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU
-         body: -[AK3_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU]
-         
-               -更多ZRAM[LZ4(推荐)、LZ4HC、LZ4K、LZ4KD、842、LZ4K_OPLUS(推荐)]
-               
-               -KPM（默认启用，不需要可自行fork编译）
-               
-               -SUSFS 1.5.9
-               
-               -风驰内核补丁
-               
-               -更多追加配置（BBR、ENC、TMPFS）
-               
-         tag_name: v${{ env.KSUVER }}
-         files: ./AnyKernel3/*.zip
+          name: Release ${{ env.PACKAGE_NAME }}
+          body: |
+            - [${{ env.PACKAGE_NAME }}]
+            
+            - 更多ZRAM[LZ4(推荐)、LZ4HC、LZ4K、LZ4KD、842、LZ4K_OPLUS(推荐)]
+            
+            - KPM（可选）
+            
+            - SUSFS 1.5.9
+            
+            - 风驰内核补丁
+            
+            - 更多追加配置（BBR、ENC、TMPFS）
+          tag_name: v${{ env.KSUVER }}
+          files: ./AnyKernel3/${{ env.PACKAGE_NAME }}
         env:
-         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
       - name: 📊 构建后空间检查
         run: |
