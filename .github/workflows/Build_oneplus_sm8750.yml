@@ -434,7 +434,7 @@ jobs:
           
           #更多配置追加
           # bbr配置
-          if: ${{ github.event.inputs.MORE == 'true' }}; then
+          if [ "${{ github.event.inputs.MORE }}" = "true" ]; then
             echo "CONFIG_TCP_CONG_ADVANCED=y" >> "$CONFIG_FILE"
             echo "CONFIG_TCP_CONG_BBR=y" >> "$CONFIG_FILE"
             echo "CONFIG_NET_SCH_FQ=y" >> "$CONFIG_FILE"
