@@ -53,6 +53,12 @@ on:
         default: true
         type: boolean
 
+      MORE:
+        description: "是否添加更多配置？"
+        required: false
+        default: false
+        type: boolean
+
 jobs:
   build:
     name: Build_${{ github.event.inputs.REPO_MANIFEST }}
@@ -426,7 +432,9 @@ jobs:
             echo "CONFIG_KSU_TRACEPOINT_HOOK=y" >> "$CONFIG_FILE" 
           fi
           
+          #更多配置追加
           # bbr配置
+          if: ${{ github.event.inputs.MORE == 'true' }}; then
             echo "CONFIG_TCP_CONG_ADVANCED=y" >> "$CONFIG_FILE"
             echo "CONFIG_TCP_CONG_BBR=y" >> "$CONFIG_FILE"
             echo "CONFIG_NET_SCH_FQ=y" >> "$CONFIG_FILE"
@@ -435,16 +443,15 @@ jobs:
             echo "CONFIG_TCP_CONG_WESTWOOD=n" >> "$CONFIG_FILE"
             echo "CONFIG_TCP_CONG_HTCP=n" >> "$CONFIG_FILE"
             echo "CONFIG_DEFAULT_TCP_CONG=bbr" >> "$CONFIG_FILE"
-
           # ECN配置
-          echo "CONFIG_IP_ECN=y" >> "$CONFIG_FILE"
-          echo "CONFIG_TCP_ECN=y" >> "$CONFIG_FILE"
-          echo "CONFIG_IPV6_ECN=y" >> "$CONFIG_FILE"
-          echo "CONFIG_IP_NF_TARGET_ECN=y" >> "$CONFIG_FILE"
-
+            echo "CONFIG_IP_ECN=y" >> "$CONFIG_FILE"
+            echo "CONFIG_TCP_ECN=y" >> "$CONFIG_FILE"
+            echo "CONFIG_IPV6_ECN=y" >> "$CONFIG_FILE"
+            echo "CONFIG_IP_NF_TARGET_ECN=y" >> "$CONFIG_FILE"
           # TMPFS配置
-          echo "CONFIG_TMPFS_XATTR=y" >> "$CONFIG_FILE"
-          echo "CONFIG_TMPFS_POSIX_ACL=y" >> "$CONFIG_FILE"
+            echo "CONFIG_TMPFS_XATTR=y" >> "$CONFIG_FILE"
+            echo "CONFIG_TMPFS_POSIX_ACL=y" >> "$CONFIG_FILE"
+          fi
           
           # 移除审查
           sed -i 's/check_defconfig//' ./common/build.config.gki
@@ -595,10 +602,14 @@ jobs:
          body: -[AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU]
          
                -更多ZRAM[LZ4(推荐)、LZ4HC、LZ4K、LZ4KD、842、LZ4K_OPLUS(推荐)]
+               
                -KPM（默认启用，不需要可自行fork编译）
+               
                -SUSFS 1.5.9
+               
                -风驰内核补丁
-               -有的没的优化（BBR、ENC、TMPFS）
+               
+               -更多追加配置（BBR、ENC、TMPFS）
                
          tag_name: v${{ env.KSUVER }}
          files: ./AnyKernel3/*.zip
