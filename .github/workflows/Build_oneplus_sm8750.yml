@@ -587,19 +587,19 @@ jobs:
       - name: 📤 上传AK3包
         uses: actions/upload-artifact@v4
         with:
-         name: AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU
+         name: AK3_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU
          path: ./AnyKernel3/*
 
       - name: 📦 创建AK3 ZIP
         run: |
          cd ./AnyKernel3/
-         zip -r ./AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU.zip *
+         zip -r ./AK3_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU.zip *
 
       - name: 📤创建发布
         uses: softprops/action-gh-release@v1
         with:
-         name: Release AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU
-         body: -[AK3_KPM_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU]
+         name: Release AK3_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU
+         body: -[AK3_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU]
          
                -更多ZRAM[LZ4(推荐)、LZ4HC、LZ4K、LZ4KD、842、LZ4K_OPLUS(推荐)]
                
