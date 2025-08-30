@@ -93,7 +93,7 @@ jobs:
           else
             case "${{ env.DEVICES_NAME }}" in
               oneplus_13 | oneplus_ace5_pro)
-                echo 'KERNEL_TIME=Tue Dec 17 23:36:49 UTC 2024' >> $GITHUB_ENV
+                echo 'KERNEL_TIME=Mon May 12 09:09:59 UTC 2025' >> $GITHUB_ENV
                 ;;
               oneplus_13t | oneplus_13s)
                 echo 'KERNEL_TIME=Tue Jun 10 12:12:23 UTC 2025' >> $GITHUB_ENV
@@ -220,11 +220,6 @@ jobs:
             cp -r ../SukiSU_patch/other/zram/lz4k_oplus ./common/lib/
 
             cd ./common
-            if [ "${REPO_MANIFEST}" != "oneplus_13t" ] && [ "${REPO_MANIFEST}" != "oneplus_13s" ] && [ "${REPO_MANIFEST}" != "oneplus_pad_2_pro" ]&& [ "${REPO_MANIFEST}" != "oneplus_pad_3" ]; then
-                sed -i 's/-32,12 +32,38/-32,11 +32,37/g' 50_add_susfs_in_gki-android15-6.6.patch
-                sed -i '/#include <trace\/hooks\/fs.h>/d' 50_add_susfs_in_gki-android15-6.6.patch
-            fi
-
             patch -p1 < 50_add_susfs_in_gki-android15-6.6.patch || true
             echo "完成"
 
@@ -460,7 +455,7 @@ jobs:
 
           case "${{ env.DEVICES_NAME }}" in
             oneplus_13 | oneplus_ace5_pro)
-              DEFAULT_SUFFIX="-android15-8-g013ec21bba94-abogki383916444-4k"
+              DEFAULT_SUFFIX="-android15-8-g4dc61d72e02f-abogki415959920-4k"
               ;;
             oneplus_13t | oneplus_13s)
               DEFAULT_SUFFIX="-androd15-8-g29d86c5fc9dd-abogki428889875-4k "
