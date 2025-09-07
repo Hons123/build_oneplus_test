@@ -74,7 +74,7 @@ jobs:
             
             - [${{ env.PACKAGE_NAME_NO_KPM }}] (无KPM版)
             
-           - [SukiSU_Manager_${{ env.KSU_VERSION }}]
+            - [SukiSU_Manager_${{ env.KSU_VERSION }}]
             
             - 更多ZRAM[LZ4(推荐)、LZ4HC、LZ4K、LZ4KD、842、LZ4K_OPLUS(推荐)]
             
