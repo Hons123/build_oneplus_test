@@ -59,6 +59,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -136,7 +137,7 @@ jobs:
             python3 git curl ccache libelf-dev \
             build-essential flex bison libssl-dev \
             libncurses-dev liblz4-tool zlib1g-dev \
-            libxml2-utils rsync unzip gcc-aarch64-linux-gnu
+            libxml2-utils rsync unzip gcc-aarch64-linux-gnu jq
           
           echo "✅ 依赖安装完成"
           
@@ -579,46 +580,48 @@ jobs:
          zip -r "$PACKAGE_NAME_KPM" *
          echo "PACKAGE_NAME_KPM=$PACKAGE_NAME_KPM" >> $GITHUB_ENV
 
-      - name: 📤 上传AK3包
-        uses: actions/upload-artifact@v4
-        with:
-          name: AK3-packages
-          path: |
-            ./AnyKernel3_NoKPM/${{ env.PACKAGE_NAME_NO_KPM }}
-            ./AnyKernel3/${{ env.PACKAGE_NAME_KPM }}
-
       - name: 📦 获取 SukiSU Manager
         run: |
           echo "This is the SukiSU variant"
+          cd kernel_workspace
+          git clone https://github.com/SukiSU-Ultra/SukiSU-Ultra.git
+          cd SukiSU-Ultra
+          KSU_GIT_VERSION=$(git rev-list --count HEAD)
+          KSU_VERSION=$((10000 + KSU_GIT_VERSION + 700))
+          echo "KSU_VERSION=$KSU_VERSION" >> $GITHUB_ENV
+          
           REPO="SukiSU-Ultra/SukiSU-Ultra"
           FILENAME="build-manager.yml"
-          KSU_VERSION="${{ env.KSUVER }}" 
-
+          
           # 获取最新成功构建的 ID
           BUILD_ID=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
           "https://api.github.com/repos/$REPO/actions/workflows/$FILENAME/runs?status=success" | \
           jq -r '.workflow_runs[0].id')
           echo "BUILD_ID=$BUILD_ID"
+          
           # 获取该构建的 Artifacts
           ARTIFACTS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             "https://api.github.com/repos/$REPO/actions/runs/$BUILD_ID/artifacts")
           echo "ARTIFACTS=$ARTIFACTS"
+          
           # 获取 Manager 文件的下载链接
           DOWNLOAD_URL=$(echo "$ARTIFACTS" | jq -r '.artifacts[] | select(.name == "manager") | .archive_download_url')
           echo $DOWNLOAD_URL
-
+          
           # 下载 Manager 文件
           curl -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -o "SukiSU-manager($KSU_VERSION).zip" "$DOWNLOAD_URL"
           echo "Manager 文件已下载为：SukiSU-manager($KSU_VERSION).zip"
           unzip *.zip
           mv *.apk SukiSU_${KSU_VERSION}.apk
 
-      - name: 📤 上传 SukiSU Manager
+      - name: 📤 上传AK3包和SukiSU Manager
         uses: actions/upload-artifact@v4
         with:
-          name: SukiSU-Manager(${{ env.KSUVER }})
+          name: AK3-packages-and-manager
           path: |
-            SukiSU_*.apk
+            ./AnyKernel3_NoKPM/${{ env.PACKAGE_NAME_NO_KPM }}
+            ./AnyKernel3/${{ env.PACKAGE_NAME_KPM }}
+            ./kernel_workspace/SukiSU-Ultra/SukiSU_${{ env.KSUVER }}.apk
 
       - name: 📤 创建发布
         uses: softprops/action-gh-release@v1
@@ -626,24 +629,17 @@ jobs:
           name: Release AK3_${{ env.KSUVER }}_SuKiSU
           body: |
             - [${{ env.PACKAGE_NAME_KPM }}] (KPM版)
-            
             - [${{ env.PACKAGE_NAME_NO_KPM }}] (无KPM版)
-            
-            - [SukiSU-Manager(${{ env.KSUVER }})]
-            
+            - [SukiSU_${{ env.KSUVER }}_Manager]
             - 更多ZRAM[LZ4(推荐)、LZ4HC、LZ4K、LZ4KD、842、LZ4K_OPLUS(推荐)]
-            
             - SUSFS
-            
             - 风驰内核补丁
-            
             - 更多追加配置（BBR、ENC、TMPFS）
-            
           tag_name: v${{ env.KSUVER }}
           files: |
             ./AnyKernel3_NoKPM/${{ env.PACKAGE_NAME_NO_KPM }}
             ./AnyKernel3/${{ env.PACKAGE_NAME_KPM }}
-            ./SukiSU_*.apk
+            ./kernel_workspace/SukiSU-Ultra/SukiSU_${{ env.KSUVER }}.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
