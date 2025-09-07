@@ -538,21 +538,17 @@ jobs:
          # Build kernel Image
          make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC="ccache clang" RUSTC="$RUSTC_PATH" PAHOLE="$PAHOLE_PATH" LD=ld.lld HOSTLD=ld.lld O=out KCFLAGS+=-O2 KCFLAGS_PERF+=-O3 Image
 
-      - name: 📥 备份原始 Image
-        run: |
-          cp kernel_workspace/kernel_platform/common/out/arch/arm64/boot/Image kernel_workspace/kernel_platform/common/out/arch/arm64/boot/Image_nokpm
-
       - name: 📦 制作无KPM AK3包
         run: |
-          git clone https://github.com/Kernel-SU/AnyKernel3.git --depth=1
-          if [ ! -d "./AnyKernel3" ]; then
+          git clone https://github.com/Kernel-SU/AnyKernel3.git --depth=1 AnyKernel3_NoKPM
+          if [ ! -d "./AnyKernel3_NoKPM" ]; then
             echo "::error ::Failed to clone AnyKernel3 repository"
             exit 1
           fi
-          rm -rf ./AnyKernel3/.git
-          rm -rf ./AnyKernel3/push.sh
-          cp kernel_workspace/kernel_platform/common/out/arch/arm64/boot/Image_nokpm ./AnyKernel3/Image
-          cd ./AnyKernel3/
+          rm -rf ./AnyKernel3_NoKPM/.git
+          rm -rf ./AnyKernel3_NoKPM/push.sh
+          cp kernel_workspace/kernel_platform/common/out/arch/arm64/boot/Image ./AnyKernel3_NoKPM/Image
+          cd ./AnyKernel3_NoKPM/
           BASE_NAME="AK3_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU"
           PACKAGE_NAME_NO_KPM="${BASE_NAME}_NoKPM.zip"
           zip -r "$PACKAGE_NAME_NO_KPM" *
@@ -569,21 +565,26 @@ jobs:
 
       - name: 📦 制作有KPM AK3包
         run: |
-          rm -rf ./AnyKernel3/.git
-          rm -rf ./AnyKernel3/push.sh
-          cp kernel_workspace/kernel_platform/common/out/arch/arm64/boot/Image ./AnyKernel3/Image
-          cd ./AnyKernel3/
-          BASE_NAME="AK3_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU"
-          PACKAGE_NAME_KPM="${BASE_NAME}_KPM.zip"
-          zip -r "$PACKAGE_NAME_KPM" *
-          echo "PACKAGE_NAME_KPM=$PACKAGE_NAME_KPM" >> $GITHUB_ENV
+         git clone https://github.com/Kernel-SU/AnyKernel3.git --depth=1      
+         if [ ! -d "./AnyKernel3" ]; then
+           echo "::error ::Failed to clone AnyKernel3 repository"
+           exit 1
+         fi
+         rm -rf ./AnyKernel3/.git
+         rm -rf ./AnyKernel3/push.sh
+         cp kernel_workspace/kernel_platform/common/out/arch/arm64/boot/Image ./AnyKernel3/Image
+         cd ./AnyKernel3/
+         BASE_NAME="AK3_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU"
+         PACKAGE_NAME_KPM="${BASE_NAME}_KPM.zip"
+         zip -r "$PACKAGE_NAME_KPM" *
+         echo "PACKAGE_NAME_KPM=$PACKAGE_NAME_KPM" >> $GITHUB_ENV
 
       - name: 📤 上传AK3包
         uses: actions/upload-artifact@v4
         with:
           name: AK3-packages
           path: |
-            ./AnyKernel3/${{ env.PACKAGE_NAME_NO_KPM }}
+            ./AnyKernel3_NoKPM/${{ env.PACKAGE_NAME_NO_KPM }}
             ./AnyKernel3/${{ env.PACKAGE_NAME_KPM }}
 
       - name: 📦 获取 SukiSU Manager
@@ -640,8 +641,8 @@ jobs:
             
           tag_name: v${{ env.KSUVER }}
           files: |
+            ./AnyKernel3_NoKPM/${{ env.PACKAGE_NAME_NO_KPM }}
             ./AnyKernel3/${{ env.PACKAGE_NAME_KPM }}
-            ./AnyKernel3/${{ env.PACKAGE_NAME_NO_KPM }}
             ./SukiSU_*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
