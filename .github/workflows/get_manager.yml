@@ -70,11 +70,9 @@ jobs:
         with:
          name: Release AK3_${{ env.KSU_VERSION }}_SuKiSU
          body: |
-            - [${{ env.PACKAGE_NAME_KPM }}] (KPM版)
-            
-            - [${{ env.PACKAGE_NAME_NO_KPM }}] (无KPM版)
-            
-            - [SukiSU_${{ env.KSU_VERSION }}_Manager]
+            - 参照AK3后缀选择是否包含KPM
+
+            - SukiSU_${{ env.KSU_VERSION }}_Manager
             
             - 更多ZRAM[LZ4(推荐)、LZ4HC、LZ4K、LZ4KD、842、LZ4K_OPLUS(推荐)]
             
