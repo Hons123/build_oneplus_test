@@ -91,7 +91,7 @@ jobs:
                 echo 'KERNEL_TIME=Mon May 12 09:09:59 UTC 2025' >> $GITHUB_ENV
                 ;;
               oneplus_13t | oneplus_13s)
-                echo 'KERNEL_TIME=Tue Jun 10 12:12:23 UTC 2025' >> $GITHUB_ENV
+                echo 'KERNEL_TIME=Tue Jul  1 19:48:18 UTC 2025' >> $GITHUB_ENV
                 ;;
               oneplus_pad_2_pro | oneplus_pad_3)
                 echo 'KERNEL_TIME=Tue Jun 3 03:22:33 UTC 2025' >> $GITHUB_ENV
@@ -447,7 +447,7 @@ jobs:
               DEFAULT_SUFFIX="-android15-8-g4dc61d72e02f-abogki415959920-4k"
               ;;
             oneplus_13t | oneplus_13s)
-              DEFAULT_SUFFIX="-androd15-8-g29d86c5fc9dd-abogki428889875-4k "
+              DEFAULT_SUFFIX="-android15-8-g29d86c5fc9dd-abogki428889875-4k "
               ;;
             oneplus_pad_2_pro | oneplus_pad_3)
               DEFAULT_SUFFIX="-android15-8-g7b1f455c7143-ab13591283-4k"
