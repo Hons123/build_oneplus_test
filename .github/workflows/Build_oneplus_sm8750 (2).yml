@@ -50,10 +50,8 @@ jobs:
 
       - name: 📦 安装依赖
         run: |
-          sudo apt update && sudo apt upgrade -y
-          sudo apt install -y python3 git curl
-          sudo apt install -y python3 git curl ccache
-          libxml2-utils rsync unzip gcc-aarch64-linux-gnu jq      
+          sudo apt update
+          sudo apt install -y python3 git curl ccache libxml2-utils rsync unzip gcc-aarch64-linux-gnu jq
           echo "✅ 依赖安装完成"
       
       - name: ⚙️ 设置对应机型配置文件
