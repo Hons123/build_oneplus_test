@@ -15,44 +15,6 @@ on:
           - 'oneplus_pad_3'
         default: 'oneplus_13t'
 
-      keep_original_settings:
-        description: "保持原内核名称及构建时间"
-        required: false
-        default: true
-        type: boolean
-
-      custom_kernel_suffix:
-        description: "✏️ 自定义内核名称 - 仅在取消勾选'保持原设置'时有效"
-        required: false
-        default: ''
-
-      custom_kernel_time:
-        description: "⏰ 自定义构建时间 - 仅在取消勾选'保持原设置'时有效"
-        required: false
-        default: ''
-
-      HOOK:
-        description: "钩子选择"
-        required: true
-        default: manual
-        type: choice
-        options:
-          - kprobe
-          - manual
-          - tracepoint
-
-      ZRAM:
-        description: "是否添加更多ZRAM算法？"
-        required: true
-        default: true
-        type: boolean
-
-      MORE:
-        description: "是否添加更多配置？"
-        required: false
-        default: true
-        type: boolean
-
 jobs:
   build:
     name: Build_${{ github.event.inputs.REPO_MANIFEST }}
@@ -88,17 +50,10 @@ jobs:
 
       - name: 📦 安装依赖
         run: |
-          sudo apt update
-          sudo rm -f /var/lib/apt/lists/lock /var/lib/dpkg/lock
-          APT_CACHE_DIR="$HOME/apt-cache"
-          mkdir -p "$APT_CACHE_DIR/lists/partial"
-          sudo apt -o Dir::Cache="$APT_CACHE_DIR" update -qq
-          sudo DEBIAN_FRONTEND=noninteractive apt -o Dir::Cache="$APT_CACHE_DIR" install -yq --no-install-recommends \
-            python3 git curl ccache libelf-dev \
-            build-essential flex bison libssl-dev \
-            libncurses-dev liblz4-tool zlib1g-dev \
-            libxml2-utils rsync unzip gcc-aarch64-linux-gnu jq
-          
+          sudo apt update && sudo apt upgrade -y
+          sudo apt install -y python3 git curl
+          sudo apt install -y python3 git curl ccache
+          libxml2-utils rsync unzip gcc-aarch64-linux-gnu jq      
           echo "✅ 依赖安装完成"
       
       - name: ⚙️ 设置对应机型配置文件
@@ -111,55 +66,13 @@ jobs:
               ;;
           esac
 
-      - name: ⚙️ 设置对应机型Cceche路径
-        run: |
-          echo "CCACHE_DIR=$HOME/.ccache_${{ env.REPO_MANIFEST }}" >> $GITHUB_ENV
-
-      - name: 🛠 配置APT缓存
-        run: |
-          APT_CACHE_DIR="$HOME/apt-cache"
-          mkdir -p "$APT_CACHE_DIR"/{archives,lists/partial}
-          echo "Dir::Cache \"$APT_CACHE_DIR\";" | sudo tee /etc/apt/apt.conf.d/90user-cache
-          echo "Dir::Cache::archives \"$APT_CACHE_DIR/archives\";" | sudo tee -a /etc/apt/apt.conf.d/90user-cache
-          echo "Dir::State::lists \"$APT_CACHE_DIR/lists\";" | sudo tee -a /etc/apt/apt.conf.d/90user-cache
-          echo "Acquire::Check-Valid-Until \"false\";" | sudo tee -a /etc/apt/apt.conf.d/90user-cache
-          echo "Acquire::Languages \"none\";" | sudo tee -a /etc/apt/apt.conf.d/90user-cache
-          sudo chown -R $USER:$USER "$APT_CACHE_DIR"
-
-      - name: 🛠 缓存APT包
-        uses: actions/cache@v4
+      - name: ⚙️ 初始化缓存
+        uses: actions/cache@v3
         with:
-          path: ${{ env.HOME }}/apt-cache
-          key: ${{ runner.os }}-apt-${{ hashFiles('.github/workflows/Build_oneplus_sm8750.yml') }}
+          path: /home/runner/.ccache
+          key: ccache-${{ runner.os }}-${{ github.ref }}
           restore-keys: |
-            ${{ runner.os }}-apt-
-          
-      - name: 📥 载入 机型：${{ env.DEVICES_NAME }}的 ccache 缓存
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.CCACHE_DIR }}
-          key: ccache-${{ runner.os }}-${{ github.ref }}-${{ env.REPO_MANIFEST }}
-          restore-keys: |
-            ccache-${{ runner.os }}-${{ env.REPO_MANIFEST }}-
             ccache-${{ runner.os }}-
-
-      - name: 📥 初始化Cceche（仅首次）
-        run: |
-          INIT_FLAG="${{ env.CCACHE_DIR }}/.ccache_initialized"
-          if command -v ccache >/dev/null 2>&1; then
-            if [ ! -f "$INIT_FLAG" ]; then
-              echo "初始化 ccache (${{ env.CCACHE_DIR }})..."
-              mkdir -p "${{ env.CCACHE_DIR }}"
-              ccache -M ${{ env.CCACHE_MAXSIZE }}
-              touch "$INIT_FLAG"
-              echo "✅ ccache 初始化完成"
-            else
-              echo "✅ ccache 已初始化，跳过"
-            fi
-          else
-            echo "❌ 未安装 ccache，跳过"
-          fi
-          ccache -s
 
       - name: 📥 安装repo工具
         run: |
@@ -201,35 +114,93 @@ jobs:
             cp -r ../SukiSU_patch/other/zram/lz4k/lib/* ./common/lib/
             cp -r ../SukiSU_patch/other/zram/lz4k/crypto/* ./common/crypto/
             cp -r ../SukiSU_patch/other/zram/lz4k_oplus ./common/lib/
-
+            
             cd ./common
             patch -p1 < 50_add_susfs_in_gki-android15-6.6.patch || true
-            echo "完成"
-
-      - name: 🔧 配置hook钩子
-        run: |
-          cd kernel_workspace/kernel_platform/common
-          if [ "${{ github.event.inputs.HOOK }}" = "kprobe" ]; then
-          echo "调用 kprobe 钩子"
-          elif [ "${{ github.event.inputs.HOOK }}" = "manual" ]; then
-          cp ../../SukiSU_patch/hooks/syscall_hooks.patch ./
-          echo "调用 manual 钩子"
-          patch -p1 -F 3 < syscall_hooks.patch
-          elif [ "${{ github.event.inputs.HOOK }}" = "tracepoint" ]; then
-          cp ../../SukiSU_patch/hooks/tracepoint_hooks.patch ./
-          echo "调用 tracepoint 钩子"
-          patch -p1 -F 3 < tracepoint_hooks.patch
-          fi
+            cp ../../SukiSU_patch/hooks/syscall_hooks.patch ./
+            patch -p1 -F 3 < syscall_hooks.patch
             echo "完成"
 
       - name: 🔧 配置HMBird GKI补丁
         run: |
-          cd kernel_workspace/kernel_platform/common
-          sed -i '1iobj-y += hmbird_patch.o' drivers/Makefile
-          wget https://raw.githubusercontent.com/AnkoleNeon/build_oneplus_test/refs/heads/main/hmbird_patch.patch
-          echo "正在打OGKI转换GKI补丁"
-          patch -p1 -F 3 < hmbird_patch.patch
-          echo "OGKI转换GKI_patch完成"
+         cd kernel_workspace/kernel_platform/common/drivers
+         cat << 'EOF' > hmbird_patch.c
+         #include <linux/init.h>
+         #include <linux/module.h>
+         #include <linux/of.h>
+         #include <linux/slab.h>
+         #include <linux/string.h>
+
+         static int __init hmbird_patch_init(void)
+         {
+             struct device_node *ver_np;
+             const char *type;
+             int ret;
+
+             ver_np = of_find_node_by_path("/soc/oplus,hmbird/version_type");
+             if (!ver_np) {
+                  pr_info("hmbird_patch: version_type node not found\n");
+                  return 0;
+             }
+
+             ret = of_property_read_string(ver_np, "type", &type);
+             if (ret) {
+                  pr_info("hmbird_patch: type property not found\n");
+                  of_node_put(ver_np);
+                  return 0;
+             }
+
+             if (strcmp(type, "HMBIRD_OGKI")) {
+                  of_node_put(ver_np);
+                  return 0;
+             }
+
+             struct property *prop = of_find_property(ver_np, "type", NULL);
+             if (prop) {
+                  struct property *new_prop = kmalloc(sizeof(*prop), GFP_KERNEL);
+                  if (!new_prop) {
+                       pr_info("hmbird_patch: kmalloc for new_prop failed\n");
+                       of_node_put(ver_np);
+                       return 0;
+             }
+             memcpy(new_prop, prop, sizeof(*prop));
+             new_prop->value = kmalloc(strlen("HMBIRD_GKI") + 1, GFP_KERNEL);
+             if (!new_prop->value) {
+                  pr_info("hmbird_patch: kmalloc for new_prop->value failed\n");
+                  kfree(new_prop);
+                  of_node_put(ver_np);
+                  return 0;
+            }
+            strcpy(new_prop->value, "HMBIRD_GKI");
+            new_prop->length = strlen("HMBIRD_GKI") + 1;
+
+            if (of_remove_property(ver_np, prop) != 0) {
+                 pr_info("hmbird_patch: of_remove_property failed\n");
+                 return 0;
+            }
+            if (of_add_property(ver_np, new_prop) !=0) {
+                 pr_info("hmbird_patch: of_add_property failed\n");
+                 return 0;
+            }
+            pr_info("hmbird_patch: success from HMBIRD_OGKI to HMBIRD_GKI\n");
+         }
+         else {
+             pr_info("hmbird_patch: type property structure not found\n");
+         }
+         of_node_put(ver_np);
+         return 0;
+         }
+         early_initcall(hmbird_patch_init);
+         MODULE_LICENSE("GPL");
+         MODULE_AUTHOR("reigadegr");
+         MODULE_DESCRIPTION("Forcefully convert HMBIRD_OGKI to HMBIRD_GKI.");
+         EOF
+         if ! grep -q "hmbird_patch.o" Makefile; then
+         echo "obj-y += hmbird_patch.o" >> Makefile
+         fi
+         cd ../../../
+         git add -A
+         git commit -m "Add HMBird GKI patch" || true
       
       - name: 🔧 配置隐藏应用补丁
         run: |
@@ -240,17 +211,12 @@ jobs:
           echo "隐藏应用_patch完成"
 
       - name: 🔧 配置ZRAM
-        if: ${{ github.event.inputs.ZRAM == 'true' }}
         run: |
           cd kernel_workspace/kernel_platform/common
           cp ../../SukiSU_patch/other/zram/zram_patch/6.6/lz4kd.patch ./
           echo "正在打lz4kd补丁"
           patch -p1 -F 3 < lz4kd.patch || true
           echo 'lz4kd_patch完成'
-          cp ../../SukiSU_patch/other/zram/zram_patch/6.6/lz4k_oplus.patch ./
-          echo "正在打lz4k_oplus补丁"
-          patch -p1 -F 3 < lz4k_oplus.patch || true
-          echo 'lz4k_oplus_patch完成'
 
       - name: 🔧 设置编译配置
         run: |
@@ -276,40 +242,22 @@ jobs:
           echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> "$CONFIG_FILE"
           
           # ZRAM配置
-          if [ "${{ github.event.inputs.ZRAM }}" = "true" ]; then
-            echo "CONFIG_CRYPTO_LZ4HC=y" >> "$CONFIG_FILE"
-            echo "CONFIG_CRYPTO_LZ4K=y" >> "$CONFIG_FILE"
-            echo "CONFIG_CRYPTO_LZ4KD=y" >> "$CONFIG_FILE"
-            echo "CONFIG_CRYPTO_842=y" >> "$CONFIG_FILE"
-            echo "CONFIG_CRYPTO_LZ4K_OPLUS=y" >> "$CONFIG_FILE"
-            echo "CONFIG_ZRAM_WRITEBACK=y" >> "$CONFIG_FILE"
-          fi
-          
-          # hook配置
-          if [ "${{ github.event.inputs.HOOK }}" = "kprobe" ]; then
-            echo "CONFIG_KSU_SUSFS_SUS_SU=y" >> "$CONFIG_FILE"
-            echo "CONFIG_KPROBES=y" >> "$CONFIG_FILE"
-            echo "CONFIG_KSU_KPROBES_HOOK=y" >> "$CONFIG_FILE"
-          elif [ "${{ github.event.inputs.HOOK }}" = "manual" ]; then
-            echo "CONFIG_KSU_SUSFS_SUS_SU=n" >> "$CONFIG_FILE"
-            echo "CONFIG_KSU_MANUAL_HOOK=y" >> "$CONFIG_FILE"
-          elif [ "${{ github.event.inputs.HOOK }}" = "tracepoint" ]; then
-            echo "CONFIG_KSU_SUSFS_SUS_SU=n" >> "$CONFIG_FILE"
-            echo "CONFIG_KSU_TRACEPOINT_HOOK=y" >> "$CONFIG_FILE" 
-          fi
-          
+          echo "CONFIG_CRYPTO_LZ4HC=y" >> "$CONFIG_FILE"
+          echo "CONFIG_CRYPTO_LZ4K=y" >> "$CONFIG_FILE"
+          echo "CONFIG_CRYPTO_LZ4KD=y" >> "$CONFIG_FILE"
+          echo "CONFIG_CRYPTO_842=y" >> "$CONFIG_FILE"
+          echo "CONFIG_ZRAM_WRITEBACK=y" >> "$CONFIG_FILE"
+
           # bbr配置
-          if [ "${{ github.event.inputs.MORE }}" = "true" ]; then
-            echo "CONFIG_TCP_CONG_ADVANCED=y" >> "$CONFIG_FILE"
-            echo "CONFIG_TCP_CONG_BBR=y" >> "$CONFIG_FILE"
-            echo "CONFIG_NET_SCH_FQ=y" >> "$CONFIG_FILE"
-            echo "CONFIG_TCP_CONG_BIC=n" >> "$CONFIG_FILE"
-            echo "CONFIG_TCP_CONG_CUBIC=n" >> "$CONFIG_FILE"
-            echo "CONFIG_TCP_CONG_WESTWOOD=n" >> "$CONFIG_FILE"
-            echo "CONFIG_TCP_CONG_HTCP=n" >> "$CONFIG_FILE"
-            echo "CONFIG_DEFAULT_TCP_CONG=bbr" >> "$CONFIG_FILE"
-          fi
-          
+          echo "CONFIG_TCP_CONG_ADVANCED=y" >> "$CONFIG_FILE"
+          echo "CONFIG_TCP_CONG_BBR=y" >> "$CONFIG_FILE"
+          echo "CONFIG_NET_SCH_FQ=y" >> "$CONFIG_FILE"
+          echo "CONFIG_TCP_CONG_BIC=n" >> "$CONFIG_FILE"
+          echo "CONFIG_TCP_CONG_CUBIC=n" >> "$CONFIG_FILE"
+          echo "CONFIG_TCP_CONG_WESTWOOD=n" >> "$CONFIG_FILE"
+          echo "CONFIG_TCP_CONG_HTCP=n" >> "$CONFIG_FILE"
+          echo "CONFIG_DEFAULT_TCP_CONG=bbr" >> "$CONFIG_FILE"
+
           # 移除审查
           sudo sed -i 's/check_defconfig//' ./common/build.config.gki
           cd common
@@ -384,61 +332,13 @@ jobs:
 
       - name: 🔨 构建内核
         run: |
-         # Set up ccache path
-         export PATH="/usr/lib/ccache:$PATH"
-
-         # Define toolchain paths
-         CLANG_PATH="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86/clang-r510928/bin"
-         RUSTC_PATH="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/prebuilts/rust/linux-x86/1.73.0b/bin/rustc"
-         PAHOLE_PATH="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/prebuilts/kernel-build-tools/linux-x86/bin/pahole"
-
-         # Check toolchain availability
-         if [ ! -d "$CLANG_PATH" ]; then
-            echo "::error ::Clang toolchain not found at $CLANG_PATH"
-            exit 1
-         fi
-         if [ ! -f "$RUSTC_PATH" ]; then
-            echo "::error ::Rust compiler not found at $RUSTC_PATH"
-            exit 1
-         fi
-         if [ ! -f "$PAHOLE_PATH" ]; then
-            echo "::error ::Pahole not found at $PAHOLE_PATH"
-            exit 1
-         fi
-
-         # Add Clang to PATH
-         export PATH="$CLANG_PATH:$PATH"
-
-         # Configure ccache for optimal caching
-         export CCACHE_COMPILERCHECK="%compiler% -dumpmachine; %compiler% -dumpversion"
-         export CCACHE_NOHASHDIR="true"
-         export CCACHE_HARDLINK="true"
-         export CCACHE_DIR="${{ env.CCACHE_DIR }}"
-         export CCACHE_MAXSIZE="8G"
-
-         # Set kernel build timestamp
-         export KBUILD_BUILD_TIMESTAMP="${{ env.KERNEL_TIME }}"
-
-         # Install dependencies
-         sudo apt update
-         sudo apt install -y libelf-dev
-
-         # Navigate to kernel source directory
-         cd kernel_workspace/kernel_platform/common
-
-         # Create output directory
-         mkdir -p out
-
-         # Configure kernel with GKI defconfig
-         make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC="ccache clang" RUSTC="$RUSTC_PATH" PAHOLE="$PAHOLE_PATH" LD=ld.lld HOSTLD=ld.lld O=out KCFLAGS+=-O2 KCFLAGS_PERF+=-O3 gki_defconfig
-
-         # Verify .config generation
-         if [ ! -f out/.config ]; then
-            echo "::error ::Failed to generate .config in out/ directory"
-            exit 1
-         fi
-         # Build kernel Image
-         make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC="ccache clang" RUSTC="$RUSTC_PATH" PAHOLE="$PAHOLE_PATH" LD=ld.lld HOSTLD=ld.lld O=out KCFLAGS+=-O2 KCFLAGS_PERF+=-O3 Image
+          export PATH="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86/clang-r510928/bin:$PATH"
+          export PATH="/usr/lib/ccache:$PATH"
+          export KBUILD_BUILD_TIMESTAMP="${{ env.KERNEL_TIME }}"
+          sudo apt update && sudo apt install -y libelf-dev
+          cd kernel_workspace/kernel_platform/common
+          mkdir -p out
+          make -j$(nproc) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC="ccache clang" RUSTC="$RUSTC_PATH" PAHOLE="$PAHOLE_PATH" LD=ld.lld HOSTLD=ld.lld O=out KCFLAGS+=-O2 KCFLAGS_PERF+=-O3 gki_defconfig Image
 
       - name: 📦 制作无KPM AK3包
         run: |
