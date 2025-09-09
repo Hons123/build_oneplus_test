@@ -67,6 +67,10 @@ jobs:
       contents: write
       actions: read
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
       - name: 📊 最大化构建空间
         uses: easimon/maximize-build-space@master
         with:
@@ -81,15 +85,21 @@ jobs:
         run: |
           git config --global user.name "AnkoleNeon"
           git config --global user.email "ankole@foxmail.com"
-      
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      
-      - name: 📊 检查磁盘空间
+
+      - name: 📦 安装依赖
         run: |
-          echo "构建前磁盘空间："
-          df -h
+          sudo apt update
+          sudo rm -f /var/lib/apt/lists/lock /var/lib/dpkg/lock
+          APT_CACHE_DIR="$HOME/apt-cache"
+          mkdir -p "$APT_CACHE_DIR/lists/partial"
+          sudo apt -o Dir::Cache="$APT_CACHE_DIR" update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt -o Dir::Cache="$APT_CACHE_DIR" install -yq --no-install-recommends \
+            python3 git curl ccache libelf-dev \
+            build-essential flex bison libssl-dev \
+            libncurses-dev liblz4-tool zlib1g-dev \
+            libxml2-utils rsync unzip gcc-aarch64-linux-gnu jq
+          
+          echo "✅ 依赖安装完成"
       
       - name: ⚙️ 设置对应机型配置文件
         id: set_manifest
@@ -100,26 +110,6 @@ jobs:
               echo "DEVICES_NAME=${{ github.event.inputs.REPO_MANIFEST }}" >> $GITHUB_ENV
               ;;
           esac
-
-      - name: ⚙️ 设置构建时间
-        id: set_kernel_time
-        run: |
-          if [ "${{ github.event.inputs.keep_original_settings }}" = "false" ] && [ -n "${{ github.event.inputs.custom_kernel_time }}" ]; then
-            echo "使用自定义构建时间: ${{ github.event.inputs.custom_kernel_time }}"
-            echo "KERNEL_TIME=${{ github.event.inputs.custom_kernel_time }}" >> $GITHUB_ENV
-          else
-            case "${{ env.DEVICES_NAME }}" in
-              oneplus_13 | oneplus_ace5_pro)
-                echo 'KERNEL_TIME=Mon May 12 09:09:59 UTC 2025' >> $GITHUB_ENV
-                ;;
-              oneplus_13t | oneplus_13s)
-                echo 'KERNEL_TIME=Tue Jul  1 19:48:18 UTC 2025' >> $GITHUB_ENV
-                ;;
-              oneplus_pad_2_pro | oneplus_pad_3)
-                echo 'KERNEL_TIME=Tue Jun 3 03:22:33 UTC 2025' >> $GITHUB_ENV
-                ;;
-            esac
-          fi
 
       - name: ⚙️ 设置对应机型Cceche路径
         run: |
@@ -143,20 +133,6 @@ jobs:
           key: ${{ runner.os }}-apt-${{ hashFiles('.github/workflows/Build_oneplus_sm8750.yml') }}
           restore-keys: |
             ${{ runner.os }}-apt-
-
-      - name: 📦 安装依赖
-        run: |
-          sudo rm -f /var/lib/apt/lists/lock /var/lib/dpkg/lock
-          APT_CACHE_DIR="$HOME/apt-cache"
-          mkdir -p "$APT_CACHE_DIR/lists/partial"
-          sudo apt -o Dir::Cache="$APT_CACHE_DIR" update -qq
-          sudo DEBIAN_FRONTEND=noninteractive apt -o Dir::Cache="$APT_CACHE_DIR" install -yq --no-install-recommends \
-            python3 git curl ccache libelf-dev \
-            build-essential flex bison libssl-dev \
-            libncurses-dev liblz4-tool zlib1g-dev \
-            libxml2-utils rsync unzip gcc-aarch64-linux-gnu jq
-          
-          echo "✅ 依赖安装完成"
           
       - name: 📥 载入 机型：${{ env.DEVICES_NAME }}的 ccache 缓存
         uses: actions/cache@v4
@@ -230,14 +206,6 @@ jobs:
             patch -p1 < 50_add_susfs_in_gki-android15-6.6.patch || true
             echo "完成"
 
-      - name: 🔧 配置隐藏应用补丁
-        run: |
-          cd kernel_workspace/kernel_platform/common
-          cp ../../SukiSU_patch/69_hide_stuff.patch ./
-          echo "正在打隐藏应用补丁"
-          patch -p1 -F 3 < 69_hide_stuff.patch
-          echo "隐藏应用_patch完成"
-
       - name: 🔧 配置hook钩子
         run: |
           cd kernel_workspace/kernel_platform/common
@@ -254,6 +222,23 @@ jobs:
           fi
             echo "完成"
 
+      - name: 🔧 配置HMBird GKI补丁
+        run: |
+          cd kernel_workspace/kernel_platform/common
+          sed -i '1iobj-y += hmbird_patch.o' drivers/Makefile
+          wget https://raw.githubusercontent.com/AnkoleNeon/build_oneplus_test/refs/heads/main/hmbird_patch.patch
+          echo "正在打OGKI转换GKI补丁"
+          patch -p1 -F 3 < hmbird_patch.patch
+          echo "OGKI转换GKI_patch完成"
+      
+      - name: 🔧 配置隐藏应用补丁
+        run: |
+          cd kernel_workspace/kernel_platform/common
+          cp ../../SukiSU_patch/69_hide_stuff.patch ./
+          echo "正在打隐藏应用补丁"
+          patch -p1 -F 3 < 69_hide_stuff.patch
+          echo "隐藏应用_patch完成"
+
       - name: 🔧 配置ZRAM
         if: ${{ github.event.inputs.ZRAM == 'true' }}
         run: |
@@ -266,15 +251,6 @@ jobs:
           echo "正在打lz4k_oplus补丁"
           patch -p1 -F 3 < lz4k_oplus.patch || true
           echo 'lz4k_oplus_patch完成'
-
-      - name: 🔧 配置HMBird GKI补丁
-        run: |
-          cd kernel_workspace/kernel_platform/common
-          sed -i '1iobj-y += hmbird_patch.o' drivers/Makefile
-          wget https://raw.githubusercontent.com/AnkoleNeon/build_oneplus_test/refs/heads/main/hmbird_patch.patch
-          echo "正在打OGKI转换GKI补丁"
-          patch -p1 -F 3 < hmbird_patch.patch
-          echo "OGKI转换GKI_patch完成"
 
       - name: 🔧 设置编译配置
         run: |
@@ -344,7 +320,7 @@ jobs:
           fi
           
           # 移除审查
-          sed -i 's/check_defconfig//' ./common/build.config.gki
+          sudo sed -i 's/check_defconfig//' ./common/build.config.gki
           cd common
           git add -A && git commit -a -m "BUILD Kernel"
 
@@ -386,7 +362,27 @@ jobs:
           ESCAPED_SUFFIX=$(printf '%s\n' "$DEFAULT_SUFFIX" | sed 's:[\/&]:\\&:g')
           sudo sed -i "s/-4k/$ESCAPED_SUFFIX/g" ./common/arch/arm64/configs/gki_defconfig
           sed -i 's/${scm_version}//' ./common/scripts/setlocalversion
-          
+      
+      - name: ⚙️ 设置构建时间
+        id: set_kernel_time
+        run: |
+          if [ "${{ github.event.inputs.keep_original_settings }}" = "false" ] && [ -n "${{ github.event.inputs.custom_kernel_time }}" ]; then
+            echo "使用自定义构建时间: ${{ github.event.inputs.custom_kernel_time }}"
+            echo "KERNEL_TIME=${{ github.event.inputs.custom_kernel_time }}" >> $GITHUB_ENV
+          else
+            case "${{ env.DEVICES_NAME }}" in
+              oneplus_13 | oneplus_ace5_pro)
+                echo 'KERNEL_TIME=Mon May 12 09:09:59 UTC 2025' >> $GITHUB_ENV
+                ;;
+              oneplus_13t | oneplus_13s)
+                echo 'KERNEL_TIME=Tue Jul  1 19:48:18 UTC 2025' >> $GITHUB_ENV
+                ;;
+              oneplus_pad_2_pro | oneplus_pad_3)
+                echo 'KERNEL_TIME=Tue Jun 3 03:22:33 UTC 2025' >> $GITHUB_ENV
+                ;;
+            esac
+          fi
+      
       - name: 🔧 写入风驰补丁
         run: |
          cd kernel_workspace/kernel_platform/
